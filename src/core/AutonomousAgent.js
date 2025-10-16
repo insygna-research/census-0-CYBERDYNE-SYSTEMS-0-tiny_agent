@@ -3,6 +3,7 @@ import { TaskManager } from './TaskManager.js';
 import { LLMClient } from '../llm/LLMClient.js';
 import { ToolSystem } from '../tools/ToolSystem.js';
 import { ReportGenerator } from './ReportGenerator.js';
+import { SubagentOrchestrator } from './SubagentOrchestrator.js';
 import { v4 as uuidv4 } from 'uuid';
 
 export class AutonomousAgent {
@@ -17,11 +18,17 @@ export class AutonomousAgent {
     };
 
     // Initialize core systems
-    this.memory = new MemorySystem(this.config.memoryOptions);
+    this.memory = new MemorySystem({...this.config.memoryOptions, llmClient: null});
     this.llmClient = new LLMClient(config.llmConfig || {});
     this.tools = new ToolSystem(config.toolConfig || {});
     this.taskManager = new TaskManager(this.memory, this.llmClient);
     this.reportGenerator = new ReportGenerator(this.memory, this.tools);
+    
+    // ANTHROPIC INSIGHT: Initialize subagent orchestrator for parallel execution
+    this.subagentOrchestrator = new SubagentOrchestrator(this.memory, this.llmClient, this.tools);
+    
+    // Set up memory system access to LLM for advanced features
+    this.memory.llmClient = this.llmClient;
 
     // Agent state
     this.status = 'ready';
@@ -36,7 +43,9 @@ export class AutonomousAgent {
       tasksFailed: 0,
       totalProcessingTime: 0,
       memoryUsage: 0,
-      uptime: Date.now()
+      uptime: Date.now(),
+      subagentSessions: 0,
+      parallelExecutions: 0
     };
 
     // Initialize event handlers
@@ -69,16 +78,20 @@ export class AutonomousAgent {
       // Store initial context
       this.memory.setShortTerm(`project_${projectId}`, project, 86400000);
       
-      // Decompose task into actionable steps
+      // ANTHROPIC INSIGHT: Choose between solo and multi-agent approach based on complexity
       this._emit('task.start', { goal, projectId });
       
-      const taskPlan = await this.taskManager.decomposeTask(goal, {
-        projectId,
-        config: options
-      });
-
-      // Execute research plan
-      const results = await this._executeResearchPlan(taskPlan, projectId);
+      let results;
+      const taskComplexity = this._assessTaskComplexity(goal, options);
+      
+      if (taskComplexity.useMultiAgent && options.allowMultiAgent !== false) {
+        console.log(`🚀 Using multi-agent approach for complex task: ${goal}`);
+        results = await this._executeMultiAgentResearch(goal, options, projectId);
+        this.metrics.parallelExecutions++;
+      } else {
+        console.log(`🎯 Using solo agent approach for task: ${goal}`);
+        results = await this._executeSoloResearch(goal, options, projectId);
+      }
 
       // Generate comprehensive report
       const report = await this.reportGenerator.generateResearchReport(
@@ -100,7 +113,8 @@ export class AutonomousAgent {
         goal,
         results,
         report: report.report,
-        metadata: report.metadata
+        metadata: report.metadata,
+        approach: taskComplexity.useMultiAgent ? 'multi-agent' : 'solo-agent'
       };
 
     } catch (error) {
@@ -113,6 +127,115 @@ export class AutonomousAgent {
         error: error.message
       };
     }
+  }
+
+  // ANTHROPIC INSIGHT: Multi-agent research using subagent orchestrator
+  async _executeMultiAgentResearch(goal, options, projectId) {
+    const context = {
+      projectId,
+      workspace: this.config.workDirectory,
+      toolsAvailable: this.tools.getToolDefinitions(),
+      startTime: Date.now()
+    };
+
+    // Execute parallel research with subagents
+    const result = await this.subagentOrchestrator.orchestrateResearch(goal, context);
+    
+    if (!result.success) {
+      throw new Error(`Multi-agent research failed: ${result.error}`);
+    }
+
+    // Store multi-agent session in memory
+    await this.memory.setLongTerm(`multiagent_session_${result.sessionId}`, {
+      sessionId: result.sessionId,
+      goal,
+      synthesis: result.synthesis,
+      subagentCount: result.subagentCount,
+      executionTime: result.executionTime
+    }, {
+      importance: 0.9,
+      tags: ['multiagent_research', 'session']
+    });
+
+    this.metrics.subagentSessions++;
+
+    // Create notes from synthesis for context
+    if (result.synthesis.key_themes) {
+      await this.memory.createNote({
+        title: `Research: ${goal}`,
+        content: result.synthesis.executive_summary,
+        themes: result.synthesis.key_themes,
+        confidence: result.synthesis.confidence_assessment?.overall || 0.7,
+        tags: ['research', goal.toLowerCase().split(' ').slice(0, 3)],
+        linkedEpisodes: [`multiagent_session_${result.sessionId}`]
+      });
+    }
+
+    return {
+      type: 'multi-agent',
+      session: result.sessionId,
+      synthesis: result.synthesis,
+      subagentCount: result.subagentCount,
+      executionStats: result.executionTime
+    };
+  }
+
+  // Fallback solo-agent research (original approach)
+  async _executeSoloResearch(goal, options, projectId) {
+    // Decompose task into actionable steps
+    const taskPlan = await this.taskManager.decomposeTask(goal, {
+      projectId,
+      config: options
+    });
+
+    // Execute research plan
+    const results = await this._executeResearchPlan(taskPlan, projectId);
+
+    return {
+      type: 'solo-agent',
+      executionPlan: taskPlan,
+      implementation: results
+    };
+  }
+
+  // ANTHROPIC INSIGHT: Task complexity assessment for agent selection
+  _assessTaskComplexity(goal, options) {
+    const complexityIndicators = {
+      keywords: ['research', 'analyze', 'compare', 'investigate', 'comprehensive', 'multiple', 'various'],
+      questionCount: (goal.match(/\?/g) || []).length,
+      hasMultipleParts: goal.includes('and') || goal.includes('or') || goal.includes(',') || goal.includes(';'),
+      length: goal.length,
+      breadthTerms: ['all', 'everything', 'complete', 'comprehensive', 'across', 'entire']
+    };
+
+    let complexityScore = 0;
+    
+    // Calculate complexity score
+    complexityIndicators.keywords.forEach(keyword => {
+      if (goal.toLowerCase().includes(keyword)) complexityScore += 2;
+    });
+    
+    complexityScore += complexityIndicators.questionCount * 1.5;
+    complexityScore += complexityIndicators.hasMultipleParts ? 1 : 0;
+    complexityScore += goal.length > 100 ? 1 : 0;
+    complexityScore += complexityIndicators.breadthTerms.some(term => 
+      goal.toLowerCase().includes(term)) ? 2 : 0;
+
+    // Decision algorithm
+    const useMultiAgent = complexityScore >= 3 && options.forceSoloAgent !== true;
+    
+    return {
+      score: complexityScore,
+      useMultiAgent,
+      reasons: useMultiAgent ? [
+        'Complex research task',
+        'Multiple aspects to investigate',
+        'Benefits from parallel exploration'
+      ] : [
+        'Focused task suitable for single agent',
+        'More efficient for simple objectives'
+      ]
+    };
   }
 
   // CONTINUOUS RESEARCH MODE
@@ -244,7 +367,14 @@ export class AutonomousAgent {
       uptime: Date.now() - this.metrics.uptime,
       metrics: this.metrics,
       memory: this.memory.getStats(),
-      llmStatus: this.llmClient.getStats()
+      llmStatus: this.llmClient.getStats(),
+      subagentStatus: this.subagentOrchestrator.getStats(),
+      capabilities: {
+        multiAgent: true,
+        contextEngineering: true,
+        toolOptimization: true,
+        structuredNotes: true
+      }
     };
   }
 

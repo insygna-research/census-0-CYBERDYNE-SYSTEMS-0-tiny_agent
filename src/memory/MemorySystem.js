@@ -9,6 +9,7 @@ export class MemorySystem {
     this.maxShortTermSize = options.maxShortTermSize || 1000;
     this.maxLongTermSize = options.maxLongTermSize || 10000;
     this.compressionThreshold = options.compressionThreshold || 1024;
+    this.llmClient = options.llmClient || null; // For context compaction
   }
 
   // SHORT TERM MEMORY - Cache immediate context and recent operations
@@ -189,6 +190,67 @@ export class MemorySystem {
     }
   }
 
+  // CONTEXT ENGINEERING: Advanced compaction for long-horizon tasks
+  async compactContext(context, importanceThreshold = 0.3) {
+    const summaryPrompt = this._buildCompactionPrompt(context);
+    
+    // Use existing LLM client through memory system (passed in during init)
+    if (this.llmClient) {
+      try {
+        const response = await this.llmClient.generate(summaryPrompt, {
+          temperature: 0.3,
+          maxTokens: 2000
+        });
+        
+        const summary = JSON.parse(response.content || '{}');
+        return this._applyCompaction(context, summary);
+      } catch (error) {
+        console.warn('Context compaction failed:', error.message);
+        return this._basicCompaction(context);
+      }
+    }
+    
+    return this._basicCompaction(context);
+  }
+
+  // STRUCTURED NOTE-TAKING: Agent memory system for persistent notes
+  async createNote(noteData) {
+    const noteId = uuidv4();
+    const note = {
+      id: noteId,
+      ...noteData,
+      timestamp: Date.now(),
+      importance: noteData.importance || 0.5,
+      tags: noteData.tags || [],
+      linkedEpisodes: noteData.linkedEpisodes || []
+    };
+
+    this.longTermMemory.set(`note_${noteId}`, note, {
+      importance: noteData.importance || 0.5,
+      tags: ['note', ...noteData.tags]
+    });
+
+    return noteId;
+  }
+
+  // Retrieve relevant notes for task continuation
+  async retrieveRelevantNotes(query, limit = 5) {
+    const context = this.retrieveContext(query);
+    const notes = [];
+    
+    // Extract from context
+    for (const item of context.longTerm) {
+      if (item.value.id?.startsWith('note_')) {
+        notes.push(item.value);
+      }
+    }
+    
+    // Sort by relevance and limit
+    return notes
+      .sort((a, b) => b.importance - a.importance)
+      .slice(0, limit);
+  }
+
   // Cache statistics and insights
   getStats() {
     return {
@@ -203,8 +265,36 @@ export class MemorySystem {
         utilization: this.longTermMemory.size / this.maxLongTermSize
       },
       episodes: this.episodicMemory.size,
-      totalMemoryUsage: this._estimateMemoryUsage()
+      notes: Array.from(this.longTermMemory.keys()).filter(key => key.startsWith('note_')).length,
+      totalMemoryUsage: this._estimateMemoryUsage(),
+      contextRotRisk: this._calculateContextRotRisk()
     };
+  }
+
+  // CONTEXT ROT ASSESSMENT: Calculate risk of context degradation
+  _calculateContextRotRisk() {
+    // Calculate stats directly to avoid recursion
+    const shortTermSize = this.shortTermMemory.size;
+    const longTermSize = this.longTermMemory.size;
+    const episodesCount = this.episodicMemory.size;
+    const notesCount = Array.from(this.longTermMemory.keys()).filter(key => key.startsWith('note_')).length;
+    
+    let totalMemoryUsage = 0;
+    for (const entry of this.shortTermMemory.values()) {
+      totalMemoryUsage += JSON.stringify(entry).length;
+    }
+    for (const entry of this.longTermMemory.values()) {
+      totalMemoryUsage += JSON.stringify(entry).length;
+    }
+    for (const episode of this.episodicMemory.values()) {
+      totalMemoryUsage += JSON.stringify(episode).length;
+    }
+    
+    // Higher risk with more tokens in context
+    if (totalMemoryUsage < 50000) return 'low';
+    if (totalMemoryUsage < 100000) return 'medium';
+    if (totalMemoryUsage < 200000) return 'high';
+    return 'critical';
   }
 
   // INTERNAL METHODS
@@ -325,6 +415,84 @@ export class MemorySystem {
 
   _decompressContent(content) {
     return content instanceof Uint8Array ? pako.inflate(content) : content;
+  }
+
+  _buildCompactionPrompt(context) {
+    return `You are an expert at context compression for AI agents. Given the following context, please identify and preserve the most critical information while discarding redundant or low-value content.
+
+CONTEXT TO COMPRESS:
+${JSON.stringify(context, null, 2)}
+
+Please return a JSON object with:
+{
+  "preserve": ["list of keys to preserve with reasons"],
+  "discard": ["list of keys to discard with reasons"],
+  "summary": "distilled essence of what was preserved",
+  "criticalDecisions": ["key decisions made during the conversation"],
+  "outstandingQuestions": ["unresolved issues or questions"],
+  "nextSteps": ["planned next actions if any"]
+}
+
+Focus on preserving: objectives, decisions, critical findings, and unresolved issues. Discard: redundant tool outputs, debug info, completed subtasks. Keep the summary under 500 tokens.`;
+  }
+
+  _applyCompaction(context, summary) {
+    const compacted = {
+      ...context,
+      preserved: summary.preserve || [],
+      discarded: summary.discard || [],
+      summary: summary.summary || '',
+      criticalDecisions: summary.criticalDecisions || [],
+      outstandingQuestions: summary.outstandingQuestions || [],
+      nextSteps: summary.nextSteps || [],
+      compactedAt: Date.now()
+    };
+
+    // Remove discarded items from memory
+    for (const keyPath of summary.discard || []) {
+      const parts = keyPath.split('.');
+      if (parts[0] === 'shortTerm') {
+        this.shortTermMemory.delete(parts[1]);
+      } else if (parts[0] === 'longTerm') {
+        this.longTermMemory.delete(parts[1]);
+      }
+    }
+
+    return compacted;
+  }
+
+  _basicCompaction(context) {
+    // Basic rule-based compaction when LLM is not available
+    const compacted = {
+      ...context,
+      summary: this._generateBasicSummary(context),
+      compactedAt: Date.now()
+    };
+
+    // Remove low-importance items
+    for (const [key, entry] of this.shortTermMemory) {
+      if (entry.importance < 0.2) {
+        this.shortTermMemory.delete(key);
+      }
+    }
+
+    return compacted;
+  }
+
+  _generateBasicSummary(context) {
+    const items = [];
+    
+    // Summarize key findings from long-term memory
+    for (const item of context.longTerm?.slice(0, 5) || []) {
+      items.push(`Key finding: ${item.key} (relevance: ${item.similarity})`);
+    }
+
+    // Summarize recent episodes
+    for (const { episode } of context.episodes?.slice(0, 3) || []) {
+      items.push(`Recent task: ${episode.type} - ${JSON.stringify(episode).substring(0, 100)}...`);
+    }
+
+    return items.join('\n');
   }
 
   _estimateMemoryUsage() {

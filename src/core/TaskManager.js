@@ -148,29 +148,67 @@ export class TaskManager {
   // INTERNAL METHODS
 
   _buildDecompositionPrompt(goal, context) {
-    return `You are an advanced task decomposition AI. Given a goal, break it down into manageable subtasks.
+    return this._createOptimizedPrompt('task_decomposition', {
+      goal,
+      context
+    });
+  }
 
-GOAL: ${goal}
+  // ANTHROPIC INSIGHT: Optimized prompt engineering with proper altitude
+  _createOptimizedPrompt(promptType, params) {
+    const templates = {
+      task_decomposition: `<system_purpose>
+You are a strategic task coordinator specializing in intelligent decomposition of high-value objectives.
+</system_purpose>
 
-CONTEXT: ${JSON.stringify(context)}
+<background_information>
+PRIMARY GOAL: {{goal}}
+CONTEXT: {{context}}
+</background_information>
 
-Please break this down into:
-1. Main research/analysis tasks
-2. Data gathering tasks  
-3. Processing/analysis tasks
-4. Output generation tasks
-5. Validation tasks
+<instructions>
+Your role is to analyze this goal and break it into logical, actionable components that maximize efficiency and success probability.
 
-For each task provide:
-- title: Clear description
+KEY HEURISTICS:
+1. Start broad, then focus details progressively
+2. Minimize dependencies between parallel tasks  
+3. Prioritize high-impact activities early
+4. Account for resource constraints and coordination costs
+5. Validate feasibility before committing to detailed planning
+
+DECOMPOSITION STRUCTURE:
+For each component, provide:
+- title: Brief, action-oriented description
 - type: research|web_search|file_operation|analysis|report_generation
-- description: What this task accomplishes
-- dependencies: Array of task IDs this depends on
-- estimated_time: Time estimate in minutes
-- priority: high|medium|low
-- tools_needed: Array of required tools
+- role: Specialist responsible for this component
+- description: What success looks like for this task
+- dependencies: What must precede this task
+- estimated_effort: 1-10 scale (relative effort)
+- priority: critical|important|standard
+- tools: Specific tools needed
+- success_metrics: How to validate completion
+</instructions>
 
-Format as JSON array. Focus on creating sequential, logical steps that build upon each other.`;
+<constraints>
+- Limit to 3-5 primary components for efficiency
+- Ensure each component has measurable outcomes
+- Avoid over-optimization; maintain flexibility
+- Focus on 80/20 principle of high-value activities
+</constraints>
+
+<output_format>
+Return a JSON array with the structure specified in instructions above.
+</output_format>`
+    };
+
+    // Substitute template parameters
+    let prompt = templates[promptType] || templates.task_decomposition;
+    
+    for (const [key, value] of Object.entries(params)) {
+      prompt = prompt.replace(new RegExp(`{{${key}}}`, 'g'), value);
+    }
+
+    return prompt;
   }
 
   _parseTaskPlan(response) {

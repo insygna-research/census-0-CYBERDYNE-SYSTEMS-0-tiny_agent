@@ -11,28 +11,209 @@ export class ToolSystem {
   constructor(config = {}) {
     this.config = {
       maxFileSize: config.maxFileSize || 10 * 1024 * 1024, // 10MB
-      maxWebContentLength: config.maxWebContentLength || 100000,
+      maxWebContentLength: config.maxWebContentLength || 50000, // Reduced for token efficiency
       webSearchDelay: config.webSearchDelay || 1000,
       allowedDomains: config.allowedDomains || [],
       blockedDomains: config.blockedDomains || ['ads.', 'tracking.'],
-      outputDirectory: config.outputDirectory || './agent_output'
+      outputDirectory: config.outputDirectory || './agent_output',
+      defaultResponseFormat: config.defaultResponseFormat || 'concise', // Token-efficient by default
+      enableToolOptimization: config.enableToolOptimization !== false
     };
+    
+    // ANTHROPIC INSIGHT: Namespacing for clear tool boundaries
+    this.namespacedTools = {
+      file: {},
+      web: {},
+      analysis: {},
+      system: {}
+    };
+    
+    this._initializeOptimizedTools();
+  }
+
+  // ANTHROPIC INSIGHT: Initialize with agent-optimized tool descriptions
+  _initializeOptimizedTools() {
+    // File Operations with clear boundaries
+    this.addTool('file_read', {
+      namespace: 'file',
+      description: 'Read file contents efficiently. Always prefer this over file_list when you know the exact file path.',
+      parameters: {
+        type: 'object',
+        properties: {
+          filePath: { type: 'string', description: 'Absolute path to file' },
+          responseFormat: { type: 'string', enum: ['concise', 'detailed'], description: 'Response verbosity (default: concise)' }
+        },
+        required: ['filePath']
+      }
+    });
+
+    this.addTool('file_search', {
+      namespace: 'file',
+      description: 'Search for files and content. Use when you don\'t know exact file paths. Returns lightweight results.',
+      parameters: {
+        type: 'object',
+        properties: {
+          searchTerm: { type: 'string', description: 'Text to search for' },
+          directory: { type: 'string', description: 'Directory to search (default: current)' },
+          limit: { type: 'number', description: 'Max results to return' }
+        },
+        required: ['searchTerm']
+      }
+    });
+
+    // Web Research with token-efficient responses
+    this.addTool('web_search', {
+      namespace: 'web',
+      description: 'Search the web for information. Use broad, short queries first, then narrow down based on results.',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: 'Search query - keep short and broad initially' },
+          maxResults: { type: 'number', description: 'Number of results (default: 10)' }
+        },
+        required: ['query']
+      }
+    });
+
+    // Token-efficient content fetching
+    this.addTool('web_fetch', {
+      namespace: 'web',
+      description: 'Fetch and extract key content from URLs. Automatically truncates for efficiency.',
+      parameters: {
+        type: 'object',
+        properties: {
+          url: { type: 'string', description: 'URL to fetch' },
+          extractSections: { type: 'array', description: 'Specific sections to extract (optional)' }
+        },
+        required: ['url']
+      }
+    });
+  }
+
+  // ANTHROPIC INSIGHT: Tool registration with namespace management
+  addTool(name, definition) {
+    if (!definition.namespace || !this.namespacedTools[definition.namespace]) {
+      throw new Error(`Invalid namespace or missing namespace in definition`);
+    }
+    
+    // ANTHROPIC INSIGHT: Optimize tool names for agent understanding
+    const toolName = `${definition.namespace}_${name}`;
+    this.namespacedTools[definition.namespace][name] = definition;
+    
+    return toolName;
+  }
+
+  // ANTHROPIC INSIGHT: Token-efficient response formats
+  async _formatToolResponse(toolName, data, format = 'concise') {
+    switch (format) {
+      case 'concise':
+        return this._formatConciseResponse(toolName, data);
+      case 'detailed':
+        return this._formatDetailedResponse(toolName, data);
+      default:
+        return this._formatConciseResponse(toolName, data);
+    }
+  }
+
+  _formatConciseResponse(toolName, data) {
+    // Return only the most relevant information, avoiding technical IDs
+    const formatted = {
+      tool: toolName,
+      success: data.success || false,
+      ...(data.success ? {
+        result: this._extractConciseResult(data)
+      } : {
+        error: data.error || 'Unknown error'
+      })
+    };
+
+    // Include helpful context only for successful operations
+    if (data.success && data.metadata) {
+      formatted.context = {
+        timestamp: data.metadata.timestamp || new Date().toISOString()
+      };
+    }
+
+    return formatted;
+  }
+
+  _formatDetailedResponse(toolName, data) {
+    // Include technical details for subsequent tool calls
+    return {
+      tool: toolName,
+      success: data.success || false,
+      metadata: data.metadata || {},
+      ...(data.success ? {
+        result: data.content || data.results || data.success
+      } : {
+        error: data.error || 'Unknown error'
+      })
+    };
+  }
+
+  _extractConciseResult(data) {
+    if (data.metadata?.size && data.content) {
+      // For file operations, return content with size info
+      const truncated = data.content.length > 2000 
+        ? data.content.substring(0, 2000) + '... (truncated)'
+        : data.content;
+      
+      return {
+        content: truncated,
+        size: `${Math.round(data.metadata.size / 1024)}KB`,
+        type: data.metadata.type || 'text'
+      };
+    }
+
+    // For other operations, return the most relevant field
+    return data.content || data.results || data.success || null;
+  }
+
+  // ANTHROPIC INSIGHT: Error messages that guide agent behavior
+  _createGuidedError(error, toolName, suggestions = []) {
+    const guidedError = {
+      error: error.message || 'Tool operation failed',
+      tool: toolName,
+      suggestions: suggestions.length > 0 ? suggestions : this._getDefaultSuggestions(toolName),
+      troubleshooting: 'Check inputs and try alternative parameters'
+    };
+
+    return guidedError;
+  }
+
+  _getDefaultSuggestions(toolName) {
+    const suggestions = {
+      file: ['Check file path exists and is accessible', 'Verify file format is supported'],
+      web: ['Check URL is accessible', 'Try with broader search terms', 'Verify internet connectivity'],
+      analysis: ['Check input data format', 'Try with simpler queries first'],
+      system: ['Verify permissions', 'Check system status']
+    };
+
+    const namespace = toolName.split('_')[0];
+    return suggestions[namespace] || ['Verify inputs and parameters'];
   }
 
   // FILE OPERATIONS TOOLS
 
+  // ANTHROPIC INSIGHT: Enhanced file operations with token efficiency
   async readFile(filePath, options = {}) {
     try {
       const stats = await stat(filePath);
       
       if (stats.size > this.config.maxFileSize) {
-        throw new Error(`File size ${(stats.size / 1024 / 1024).toFixed(2)}MB exceeds limit`);
+        const error = new Error(`File size ${(stats.size / 1024 / 1024).toFixed(2)}MB exceeds limit`);
+        return this._createGuidedError(error, 'file_read', [
+          'Try with a smaller file',
+          'Use file_search to find specific sections'
+        ]);
       }
 
       const content = await readFile(filePath, 'utf8');
       const extension = extname(filePath);
       
-      return {
+      // Token-efficient response format
+      const responseFormat = options.responseFormat || this.config.defaultResponseFormat;
+      const response = this._formatToolResponse('file_read', {
         success: true,
         content,
         metadata: {
@@ -40,16 +221,23 @@ export class ToolSystem {
           modified: stats.mtime,
           path: filePath,
           extension,
-          encoding: 'utf8'
+          type: this._getFileType(extension)
         }
-      };
+      }, responseFormat);
+      
+      return response;
     } catch (error) {
-      return {
-        success: false,
-        error: error.message,
-        code: error.code
-      };
+      return this._createGuidedError(error, 'file_read');
     }
+  }
+
+  _getFileType(ext) {
+    const types = {
+      '.js': 'javascript', '.ts': 'typescript', '.py': 'python',
+      '.md': 'markdown', '.json': 'json', '.xml': 'xml',
+      '.txt': 'text', '.csv': 'csv'
+    };
+    return types[ext] || 'text';
   }
 
   async writeFile(filePath, content, options = {}) {
@@ -390,12 +578,72 @@ export class ToolSystem {
 
   // UTILITY METHODS
 
+  // ANTHROPIC INSIGHT: Get tools organized by namespace with purpose descriptions
   getToolList() {
-    return {
-      file: ['readFile', 'writeFile', 'editFile', 'listDirectory'],
-      web: ['webSearch', 'fetchUrl'],
-      analysis: ['analyzeText', 'fileSearch']
+    const organized = {
+      file: {
+        tools: Object.keys(this.namespacedTools.file),
+        description: 'File operations for reading, writing, and searching files efficiently'
+      },
+      web: {
+        tools: Object.keys(this.namespacedTools.web),
+        description: 'Web research tools for searching and fetching online content'
+      },
+      analysis: {
+        tools: Object.keys(this.namespacedTools.analysis),
+        description: 'Analysis tools for processing and extracting insights from data'
+      },
+      system: {
+        tools: Object.keys(this.namespacedTools.system),
+        description: 'System tools for agent coordination and state management'
+      }
     };
+
+    return organized;
+  }
+
+  // ANTHROPIC INSIGHT: Get detailed tool descriptions for agent understanding
+  getToolDefinitions() {
+    const allTools = [];
+    
+    for (const [namespace, tools] of Object.entries(this.namespacedTools)) {
+      for (const [name, definition] of Object.entries(tools)) {
+        allTools.push({
+          name: `${namespace}_${name}`,
+          namespace,
+          description: definition.description,
+          parameters: definition.parameters,
+          heuristics: this._getToolHeuristics(namespace, name)
+        });
+      }
+    }
+    
+    return allTools;
+  }
+
+  _getToolHeuristics(namespace, toolName) {
+    const heuristics = {
+      file: {
+        file_read: 'Prefer when you know exact file path. Use concise format for quick reads, detailed for subsequent operations.',
+        file_search: 'Use when file path unknown or searching content. Returns lightweight results for navigation.',
+        file_write: 'Always verify directory exists. Use for creating reports, code, or configuration files.',
+        file_edit: 'Use for targeted changes. Specify exact text to replace for precision.'
+      },
+      web: {
+        web_search: 'Start with broad, short queries. Narrow down based on results before fetching specific content.',
+        web_fetch: 'Use after web_search identifies relevant URLs. Automatically limits content length for efficiency.'
+      },
+      analysis: {
+        analyze_text: 'Use for extracting patterns, statistics, and key information from text content.',
+        file_search: 'Combines file search with content analysis. Use when searching for specific terms across files.'
+      },
+      system: {
+        system_status: 'Check system health and capabilities before starting complex operations.',
+        system_optimize: 'Use when performance issues detected or context window approaching limits.'
+      }
+    };
+    
+    return heuristics[namespace]?.[toolName] || 'Use as described in tool definition.';
   }
 
   getToolDescription(toolName) {
