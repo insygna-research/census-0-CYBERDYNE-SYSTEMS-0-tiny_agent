@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tiny Autonomous Research Agent</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div id="app">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <div class="logo">
+                    <h1>🤖 Tiny Agent</h1>
+                    <span class="status-indicator" id="connection-status"></span>
+                </div>
+                <div class="header-controls">
+                    <button id="settings-btn" class="btn btn-secondary">⚙️ Settings</button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <div class="container">
+                <!-- Agent Status Card -->
+                <section class="card status-card">
+                    <h2>Agent Status</h2>
+                    <div id="agent-status" class="status-info">
+                        <div class="status-grid">
+                            <div class="status-item">
+                                <span class="label">Status:</span>
+                                <span id="agent-status-text" class="value">Connecting...</span>
+                            </div>
+                            <div class="status-item">
+                                <span class="label">Active Projects:</span>
+                                <span id="active-projects" class="value">0</span>
+                            </div>
+                            <div class="status-item">
+                                <span class="label">Completed:</span>
+                                <span id="completed-projects" class="value">0</span>
+                            </div>
+                            <div class="status-item">
+                                <span class="label">LLM Provider:</span>
+                                <span id="llm-provider" class="value">-</span>
+                            </div>
+                        </div>
+                        <div id="metrics" class="metrics-grid">
+                            <div class="metric-item">
+                                <span class="metric-label">Tasks Completed</span>
+                                <span id="tasks-completed" class="metric-value">0</span>
+                            </div>
+                            <div class="metric-item">
+                                <span class="metric-label">Tasks Failed</span>
+                                <span id="tasks-failed" class="metric-value">0</span>
+                            </div>
+                            <div class="metric-item">
+                                <span class="metric-label">Uptime</span>
+                                <span id="uptime" class="metric-value">0m</span>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- New Research Form -->
+                <section class="card research-form-card">
+                    <h2>Start New Research</h2>
+                    <form id="research-form">
+                        <div class="form-group">
+                            <label for="research-goal">Research Goal</label>
+                            <textarea 
+                                id="research-goal" 
+                                name="goal" 
+                                placeholder="Enter your research goal here. For example: 'Latest AI agent architectures that use context caching'"
+                                rows="3"
+                                required
+                            ></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label for="research-options">Options</label>
+                            <div class="options-grid">
+                                <div class="option-item">
+                                    <input type="checkbox" id="include-detailed" name="includeDetailed" checked>
+                                    <label for="include-detailed">Include detailed analysis</label>
+                                </div>
+                                <div class="option-item">
+                                    <input type="checkbox" id="generate-report" name="generateReport" checked>
+                                    <label for="generate-report">Generate comprehensive report</label>
+                                </div>
+                                <div class="option-item">
+                                    <select id="report-format" name="reportFormat">
+                                        <option value="markdown">Markdown</option>
+                                        <option value="text">Plain Text</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-primary" id="start-research-btn">
+                            🚀 Start Research
+                        </button>
+                    </form>
+                </section>
+
+                <!-- Projects List -->
+                <section class="card projects-card">
+                    <div class="card-header">
+                        <h2>Projects</h2>
+                        <div class="filter-tabs">
+                            <button class="tab active" data-filter="active">Active (0)</button>
+                            <button class="tab" data-filter="completed">Completed (0)</button>
+                            <button class="tab" data-filter="all">All (0)</button>
+                        </div>
+                    </div>
+                    <div id="projects-list" class="projects-list">
+                        <div class="empty-state">
+                            <p>No projects yet. Start your first research above!</p>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Project Details Modal -->
+                <div id="project-modal" class="modal">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h3 id="modal-project-title">Project Details</h3>
+                            <button class="close-btn" onclick="closeProjectModal()">&times;</button>
+                        </div>
+                        <div class="modal-body">
+                            <div id="modal-project-content">
+                                <!-- Project details will be loaded here -->
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <div id="modal-actions">
+                                <!-- Actions will be added dynamically -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Settings Modal -->
+                <div id="settings-modal" class="modal">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h3>Settings</h3>
+                            <button class="close-btn" onclick="closeSettingsModal()">&times;</button>
+                        </div>
+                        <div class="modal-body">
+                            <form id="settings-form">
+                                <div class="form-group">
+                                    <label for="llm-provider-select">LLM Provider</label>
+                                    <select id="llm-provider-select">
+                                        <option value="lmstudio">LM Studio</option>
+                                        <option value="openrouter">OpenRouter</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="lm-studio-url">LM Studio URL</label>
+                                    <input 
+                                        type="url" 
+                                        id="lm-studio-url" 
+                                        value="http://localhost:1234"
+                                        placeholder="http://localhost:1234"
+                                    >
+                                </div>
+                                <div class="form-group">
+                                    <label for="openrouter-api-key">OpenRouter API Key</label>
+                                    <input 
+                                        type="password" 
+                                        id="openrouter-api-key" 
+                                        placeholder="your-api-key-here"
+                                    >
+                                </div>
+                                <div class="form-group">
+                                    <label for="max-concurrent-tasks">Max Concurrent Tasks</label>
+                                    <input 
+                                        type="number" 
+                                        id="max-concurrent-tasks" 
+                                        min="1" 
+                                        max="10" 
+                                        value="3"
+                                    >
+                                </div>
+                                <div class="form-group">
+                                    <label>
+                                        <input type="checkbox" id="auto-cleanup" checked>
+                                        Enable automatic cleanup
+                                    </label>
+                                </div>
+                            </form>
+                        </div>
+                        <div class="modal-footer">
+                            <button class="btn btn-secondary" onclick="closeSettingsModal()">Cancel</button>
+                            <button class="btn btn-primary" onclick="saveSettings()">Save Settings</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Toast Notifications -->
+                <div id="toast-container" class="toast-container"></div>
+            </div>
+        </main>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
