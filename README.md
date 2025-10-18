@@ -48,25 +48,84 @@ npm start
 node src/index.js help
 ```
 
-### 3. Access the Interface
+### 3. Configure LLM Provider
 
-Open your browser to: **http://localhost:8080**
+Choose one of the following:
 
-### 4. First Research
+#### Option A: LM Studio (Local, Free)
+1. Download [LM Studio](https://lmstudio.ai/)
+2. Install and open LM Studio
+3. Download a model (recommended: Mistral 7B, Llama 2, or similar)
+4. Click "Start Server" in LM Studio (default port: 1234)
+5. The agent will automatically connect
 
-Enter a research goal like:
-```
-"Latest AI agent architectures using context caching and memory systems"
-```
+#### Option B: OpenRouter (Cloud, Requires API Key)
+1. Create account at [openrouter.ai](https://openrouter.ai)
+2. Navigate to Keys section and generate an API key
+3. Set the environment variable:
+   ```bash
+   export OPENROUTER_API_KEY=sk-or-v1-your-key-here
+   ```
+   Or configure it in the web UI settings
+
+### 4. Access the Interfaces
+
+Two interfaces are available:
+
+**Chat Interface** (Recommended for interactive use):
+- URL: **http://localhost:8080/chat.html**
+- Conversational interaction with the agent
+- Send links for analysis
+- Get streaming responses
+- Perfect for quick questions and exploration
+
+**Project Management Interface**:
+- URL: **http://localhost:8080/**
+- Formal research project management
+- Start comprehensive research tasks
+- Monitor multiple active projects
+- Generate detailed reports
+
+### 5. First Research
+
+#### Using Chat Interface:
+1. Open http://localhost:8080/chat.html
+2. Configure settings (⚙️ button) to select LLM provider
+3. Send a message like:
+   ```
+   Research the latest AI agent architectures using context caching
+   ```
+4. The agent will process your request and provide results
+
+#### Using Project Interface:
+1. Open http://localhost:8080/
+2. Enter a research goal:
+   ```
+   Latest AI agent architectures using context caching and memory systems
+   ```
+3. Click "Start Research"
+4. Monitor progress and view comprehensive report when complete
 
 ## 💡 Usage Examples
 
-### Web Interface
-1. Open **http://localhost:8080**
+### Chat Interface (Interactive)
+1. Open **http://localhost:8080/chat.html**
+2. Configure LLM provider in Settings
+3. Start chatting with the agent:
+   - "What are the latest developments in AI?"
+   - "Analyze this article: https://example.com/article"
+   - "Research and compare React vs Vue.js"
+4. Receive real-time responses with typing indicators
+5. Ask follow-up questions naturally
+
+### Project Management Interface (Formal Research)
+1. Open **http://localhost:8080/**
 2. Enter your research goal in the form
-3. Click "Start Research"
-4. Monitor progress in real-time
-5. View comprehensive reports when complete
+3. Select options (detailed analysis, report format)
+4. Click "Start Research"
+5. Monitor progress in real-time
+6. View comprehensive reports when complete
+7. Pause/resume projects as needed
 
 ### CLI Mode
 ```bash
@@ -157,18 +216,68 @@ const agent = new AutonomousAgent({
 });
 ```
 
-### LM Studio Setup
+### LM Studio Setup (Local LLMs)
 
-1. Download and install LM Studio
-2. Start LM Studio (default port: 1234)
-3. Load a model (LLaMA, Mistral, etc.)
-4. The agent will auto-detect and connect
+**Advantages:**
+- ✅ Free and private
+- ✅ No API limits
+- ✅ Run offline
+- ✅ Full control over models
 
-### OpenRouter Setup
+**Setup Steps:**
+1. Download [LM Studio](https://lmstudio.ai/) for your OS
+2. Install and open LM Studio
+3. Download a model from the Models tab:
+   - **Recommended for research**: `TheBloke/Mistral-7B-Instruct-v0.2-GGUF`
+   - **Fast and efficient**: `TheBloke/Llama-2-7B-Chat-GGUF`
+   - **Larger, more capable**: `TheBloke/Llama-2-13B-Chat-GGUF`
+4. Click "Local Server" tab
+5. Click "Start Server" (ensure port is 1234)
+6. In the web UI Settings:
+   - Select "LM Studio" as provider
+   - URL should be: `http://localhost:1234`
+   - Click "Test Connection" to verify
 
-1. Create an account at [openrouter.ai](https://openrouter.ai)
-2. Generate an API key
-3. Set environment variable or configure in UI settings
+**Troubleshooting LM Studio:**
+- Ensure the server is running (green indicator in LM Studio)
+- Check no firewall is blocking port 1234
+- Try different models if one doesn't work well
+- Increase context length in LM Studio for better results
+
+### OpenRouter Setup (Cloud LLMs)
+
+**Advantages:**
+- ✅ Access to latest models (Claude 3.5, GPT-4, etc.)
+- ✅ No local setup required
+- ✅ Higher quality responses
+- ✅ Automatic model updates
+
+**Setup Steps:**
+1. Create account at [openrouter.ai](https://openrouter.ai)
+2. Add credits ($5-10 recommended for testing)
+3. Navigate to **Keys** section
+4. Click "Create Key" and copy the API key
+5. Set environment variable (recommended):
+   ```bash
+   export OPENROUTER_API_KEY=sk-or-v1-your-key-here
+   ```
+   Or configure in web UI:
+   - Open Settings (⚙️ button)
+   - Select "OpenRouter" as provider
+   - Paste your API key
+   - Select model (Claude 3.5 Sonnet recommended)
+   - Click "Test Connection" to verify
+
+**Recommended Models:**
+- **Claude 3.5 Sonnet**: Best for research and analysis
+- **Claude 3 Opus**: Most capable, higher cost
+- **GPT-4 Turbo**: Good for general tasks
+- **Claude 3 Haiku**: Fastest, most economical
+
+**Cost Estimates** (approximate):
+- Light research query: $0.01 - $0.05
+- Medium research task: $0.10 - $0.50
+- Comprehensive research: $0.50 - $2.00
 
 ## 📊 Projects and Tasks
 

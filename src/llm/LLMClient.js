@@ -183,16 +183,19 @@ export class LLMClient {
   async _generateWithLMStudio(prompt, options) {
     const url = `${this.config.lmStudio.baseUrl}/v1/chat/completions`;
     
+    // Use the configured model or fall back to options
+    const modelName = options.model || this.config.lmStudio.model || 'ibm/granite-4-h-micro';
+    
     const response = await axios.post(url, {
-      model: options.model || this.config.lmStudio.model,
+      model: modelName,
       messages: [{ role: 'user', content: prompt }],
-      temperature: options.temperature,
-      max_tokens: options.maxTokens,
-      top_p: options.topP,
-      frequency_penalty: options.frequencyPenalty,
-      presence_penalty: options.presencePenalty,
+      temperature: options.temperature || 0.7,
+      max_tokens: options.maxTokens || 2000,
+      top_p: options.topP || 0.9,
+      frequency_penalty: options.frequencyPenalty || 0,
+      presence_penalty: options.presencePenalty || 0,
       stop: options.stop,
-      stream: options.stream
+      stream: options.stream || false
     }, {
       timeout: this.config.lmStudio.timeout,
       headers: {

@@ -7,6 +7,7 @@ class AgentUI {
     this.reconnectDelay = 2000;
     this.currentFilter = 'active';
     this.projects = new Map();
+    this.pendingRequests = new Map();
     this.settings = {
       llmProvider: 'lmstudio',
       lmStudioUrl: 'http://localhost:1234',
@@ -103,8 +104,14 @@ class AgentUI {
 
   handleResponse(requestId, data) {
     if (this.pendingRequests && this.pendingRequests.has(requestId)) {
-      const callback = this.pendingRequests.get(requestId);
-      callback(data);
+      const { resolve, reject } = this.pendingRequests.get(requestId);
+      
+      if (data.success === false || data.error) {
+        reject(new Error(data.error || 'Request failed'));
+      } else {
+        resolve(data);
+      }
+      
       this.pendingRequests.delete(requestId);
     }
   }
@@ -112,17 +119,17 @@ class AgentUI {
   // API Requests (WebSocket fallback to HTTP)
   async sendRequest(type, data = {}) {
     return new Promise((resolve, reject) => {
-      const requestId = Date.now().toString();
+      const requestId = Date.now().toString() + '_' + Math.random().toString(36).substr(2, 9);
       
       if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-        if (!this.pendingRequests) this.pendingRequests = new Map();
+        // Store resolve and reject callbacks as object
         this.pendingRequests.set(requestId, { resolve, reject });
         
         this.ws.send(JSON.stringify({ type, id: requestId, data }));
         
         // Timeout after 30 seconds
         setTimeout(() => {
-          if (this.pendingRequests?.has(requestId)) {
+          if (this.pendingRequests.has(requestId)) {
             this.pendingRequests.delete(requestId);
             reject(new Error('Request timeout'));
           }
@@ -711,12 +718,11 @@ window.saveSettings = () => {
   if (window.agentUI) window.agentUI.saveSettings();
 };
 
-// Initialize the UI when DOM is loaded
+// Initialize both UI systems when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
   window.agentUI = new AgentUI();
+  window.chat = new ChatManager();
+  
+  // Show initial connection status
+  this.updateConnectionStatus('connecting');
 });
-
-// Make some functions globally available for onclick handlers
-window.showToast = (message, type, duration) => {
-  if (window.agentUI) window.agentUI.showToast(message, type, duration);
-};

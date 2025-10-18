@@ -4,6 +4,7 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import axios from 'axios';
 import * as cheerio from 'cheerio';
+import { TavilyClient } from '../tavily/TavilyClient.js';
 
 const execAsync = promisify(exec);
 
@@ -17,17 +18,27 @@ export class ToolSystem {
       blockedDomains: config.blockedDomains || ['ads.', 'tracking.'],
       outputDirectory: config.outputDirectory || './agent_output',
       defaultResponseFormat: config.defaultResponseFormat || 'concise', // Token-efficient by default
-      enableToolOptimization: config.enableToolOptimization !== false
+      enableToolOptimization: config.enableToolOptimization !== false,
+      tavilyApiKey: config.tavilyApiKey || process.env.TAVILY_API_KEY
     };
-    
+
     // ANTHROPIC INSIGHT: Namespacing for clear tool boundaries
     this.namespacedTools = {
       file: {},
       web: {},
+      tavily: {},
       analysis: {},
       system: {}
     };
-    
+
+    // Initialize Tavily client if API key is available
+    if (this.config.tavilyApiKey) {
+      this.tavilyClient = new TavilyClient(this.config.tavilyApiKey, {
+        timeout: this.config.webSearchDelay * 30,
+        maxRetries: 3
+      });
+    }
+
     this._initializeOptimizedTools();
   }
 
@@ -88,6 +99,220 @@ export class ToolSystem {
         required: ['url']
       }
     });
+
+    // TAVILY WEB SEARCH TOOLS
+    if (this.tavilyClient) {
+      // Main search tool
+      this.addTool('search', {
+        namespace: 'tavily',
+        description: 'Advanced web search using Tavily API. Provides comprehensive results with answer extraction.',
+        parameters: {
+          type: 'object',
+          properties: {
+            query: { type: 'string', description: 'Search query' },
+            searchDepth: { type: 'string', enum: ['basic', 'advanced'], description: 'Search depth (default: basic)' },
+            maxResults: { type: 'number', description: 'Maximum results (default: 10)' },
+            includeAnswer: { type: 'boolean', description: 'Include extracted answer (default: true)' },
+            includeRawContent: { type: 'boolean', description: 'Include full page content (default: false)' },
+            includeDomains: { type: 'array', items: { type: 'string' }, description: 'Include specific domains' },
+            excludeDomains: { type: 'array', items: { type: 'string' }, description: 'Exclude specific domains' },
+            days: { type: 'number', description: 'Filter results by last N days' }
+          },
+          required: ['query']
+        }
+      });
+
+      // Quick search tool
+      this.addTool('quick_search', {
+        namespace: 'tavily',
+        description: 'Fast web search with limited results for quick information gathering.',
+        parameters: {
+          type: 'object',
+          properties: {
+            query: { type: 'string', description: 'Search query' },
+            maxResults: { type: 'number', description: 'Maximum results (default: 5)' },
+            includeDomains: { type: 'array', items: { type: 'string' }, description: 'Include specific domains' },
+            excludeDomains: { type: 'array', items: { type: 'string' }, description: 'Exclude specific domains' }
+          },
+          required: ['query']
+        }
+      });
+
+      // Advanced search tool
+      this.addTool('advanced_search', {
+        namespace: 'tavily',
+        description: 'Comprehensive web search with maximum detail and content extraction.',
+        parameters: {
+          type: 'object',
+          properties: {
+            query: { type: 'string', description: 'Search query' },
+            maxResults: { type: 'number', description: 'Maximum results (default: 20)' },
+            includeRawContent: { type: 'boolean', description: 'Include full page content (default: true)' },
+            includeImages: { type: 'boolean', description: 'Include image results (default: true)' },
+            includeImageDescriptions: { type: 'boolean', description: 'Include image descriptions (default: true)' },
+            includeDomains: { type: 'array', items: { type: 'string' }, description: 'Include specific domains' },
+            excludeDomains: { type: 'array', items: { type: 'string' }, description: 'Exclude specific domains' },
+            days: { type: 'number', description: 'Filter results by last N days' }
+          },
+          required: ['query']
+        }
+      });
+
+      // News search tool
+      this.addTool('news_search', {
+        namespace: 'tavily',
+        description: 'Search for recent news articles and current events.',
+        parameters: {
+          type: 'object',
+          properties: {
+            query: { type: 'string', description: 'Search query' },
+            maxResults: { type: 'number', description: 'Maximum results (default: 10)' },
+            days: { type: 'number', description: 'Filter by last N days (default: 7)' },
+            includeDomains: { type: 'array', items: { type: 'string' }, description: 'Include specific domains' },
+            excludeDomains: { type: 'array', items: { type: 'string' }, description: 'Exclude specific domains' }
+          },
+          required: ['query']
+        }
+      });
+
+      // Academic search tool
+      this.addTool('academic_search', {
+        namespace: 'tavily',
+        description: 'Search for scholarly articles, research papers, and academic content.',
+        parameters: {
+          type: 'object',
+          properties: {
+            query: { type: 'string', description: 'Search query' },
+            maxResults: { type: 'number', description: 'Maximum results (default: 15)' },
+            includeRawContent: { type: 'boolean', description: 'Include full paper content (default: true)' },
+            includeDomains: { type: 'array', items: { type: 'string' }, description: 'Include specific domains' },
+            excludeDomains: { type: 'array', items: { type: 'string' }, description: 'Exclude specific domains' }
+          },
+          required: ['query']
+        }
+      });
+
+      // Image search tool
+      this.addTool('image_search', {
+        namespace: 'tavily',
+        description: 'Search for images with descriptions and metadata.',
+        parameters: {
+          type: 'object',
+          properties: {
+            query: { type: 'string', description: 'Search query' },
+            maxResults: { type: 'number', description: 'Maximum results (default: 10)' },
+            includeImageDescriptions: { type: 'boolean', description: 'Include image descriptions (default: true)' },
+            includeImageRawData: { type: 'boolean', description: 'Include raw image data (default: false)' },
+            includeDomains: { type: 'array', items: { type: 'string' }, description: 'Include specific domains' },
+            excludeDomains: { type: 'array', items: { type: 'string' }, description: 'Exclude specific domains' }
+          },
+          required: ['query']
+        }
+      });
+
+      // Video search tool
+      this.addTool('video_search', {
+        namespace: 'tavily',
+        description: 'Search for videos from platforms like YouTube, Vimeo, etc.',
+        parameters: {
+          type: 'object',
+          properties: {
+            query: { type: 'string', description: 'Search query' },
+            maxResults: { type: 'number', description: 'Maximum results (default: 10)' },
+            includeDomains: { type: 'array', items: { type: 'string' }, description: 'Include specific domains' },
+            excludeDomains: { type: 'array', items: { type: 'string' }, description: 'Exclude specific domains' }
+          },
+          required: ['query']
+        }
+      });
+
+      // Answer extraction tool
+      this.addTool('extract_answer', {
+        namespace: 'tavily',
+        description: 'Extract specific answers to questions from web content.',
+        parameters: {
+          type: 'object',
+          properties: {
+            query: { type: 'string', description: 'Question or query to answer' },
+            maxResults: { type: 'number', description: 'Maximum sources to consider (default: 5)' },
+            includeDomains: { type: 'array', items: { type: 'string' }, description: 'Include specific domains' },
+            excludeDomains: { type: 'array', items: { type: 'string' }, description: 'Exclude specific domains' }
+          },
+          required: ['query']
+        }
+      });
+
+      // URL crawling tool
+      this.addTool('crawl_urls', {
+        namespace: 'tavily',
+        description: 'Crawl specific URLs to extract their content.',
+        parameters: {
+          type: 'object',
+          properties: {
+            urls: { type: 'array', items: { type: 'string' }, description: 'URLs to crawl' },
+            includeRawContent: { type: 'boolean', description: 'Include full page content (default: false)' },
+            includeHtml: { type: 'boolean', description: 'Include raw HTML (default: false)' },
+            includeScreenshot: { type: 'boolean', description: 'Include page screenshots (default: false)' }
+          },
+          required: ['urls']
+        }
+      });
+
+      // Multi-search tool
+      this.addTool('multi_search', {
+        namespace: 'tavily',
+        description: 'Perform multiple searches in parallel for different queries or search types.',
+        parameters: {
+          type: 'object',
+          properties: {
+            searches: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  query: { type: 'string', description: 'Search query' },
+                  type: { type: 'string', enum: ['search', 'quick', 'advanced', 'news', 'academic', 'image', 'video', 'answer'], description: 'Search type' }
+                },
+                required: ['query']
+              },
+              description: 'Array of search objects with query and type'
+            },
+            maxResults: { type: 'number', description: 'Default maximum results per search' }
+          },
+          required: ['searches']
+        }
+      });
+
+      // Search suggestions tool
+      this.addTool('get_suggestions', {
+        namespace: 'tavily',
+        description: 'Get search suggestions and related queries for a given term.',
+        parameters: {
+          type: 'object',
+          properties: {
+            query: { type: 'string', description: 'Base query to get suggestions for' }
+          },
+          required: ['query']
+        }
+      });
+
+      // Location-based search tool
+      this.addTool('location_search', {
+        namespace: 'tavily',
+        description: 'Search for location-specific information and results.',
+        parameters: {
+          type: 'object',
+          properties: {
+            query: { type: 'string', description: 'Search query' },
+            location: { type: 'string', description: 'Location to include in search' },
+            maxResults: { type: 'number', description: 'Maximum results (default: 10)' },
+            includeDomains: { type: 'array', items: { type: 'string' }, description: 'Include specific domains' },
+            excludeDomains: { type: 'array', items: { type: 'string' }, description: 'Exclude specific domains' }
+          },
+          required: ['query', 'location']
+        }
+      });
+    }
   }
 
   // ANTHROPIC INSIGHT: Tool registration with namespace management
@@ -589,6 +814,11 @@ export class ToolSystem {
         tools: Object.keys(this.namespacedTools.web),
         description: 'Web research tools for searching and fetching online content'
       },
+      tavily: {
+        tools: Object.keys(this.namespacedTools.tavily),
+        description: 'Tavily AI-powered web search tools with advanced filtering and content extraction',
+        available: !!this.tavilyClient
+      },
       analysis: {
         tools: Object.keys(this.namespacedTools.analysis),
         description: 'Analysis tools for processing and extracting insights from data'
@@ -633,6 +863,20 @@ export class ToolSystem {
         web_search: 'Start with broad, short queries. Narrow down based on results before fetching specific content.',
         web_fetch: 'Use after web_search identifies relevant URLs. Automatically limits content length for efficiency.'
       },
+      tavily: {
+        search: 'Use for comprehensive web searches with answer extraction. Good for research and fact-checking.',
+        quick_search: 'Use for fast information gathering when you need quick results with minimal detail.',
+        advanced_search: 'Use when you need maximum detail, including images and full content extraction.',
+        news_search: 'Use for recent news and current events. Automatically filters for recent content.',
+        academic_search: 'Use for scholarly articles and research papers. Targets academic domains.',
+        image_search: 'Use when you need visual content or images with descriptions.',
+        video_search: 'Use for video content from platforms like YouTube and Vimeo.',
+        extract_answer: 'Use when you need specific answers to questions from web content.',
+        crawl_urls: 'Use when you need to extract content from specific known URLs.',
+        multi_search: 'Use for complex research requiring multiple search types simultaneously.',
+        get_suggestions: 'Use to find related search terms and expand your research scope.',
+        location_search: 'Use when location-specific information is required.'
+      },
       analysis: {
         analyze_text: 'Use for extracting patterns, statistics, and key information from text content.',
         file_search: 'Combines file search with content analysis. Use when searching for specific terms across files.'
@@ -642,7 +886,7 @@ export class ToolSystem {
         system_optimize: 'Use when performance issues detected or context window approaching limits.'
       }
     };
-    
+
     return heuristics[namespace]?.[toolName] || 'Use as described in tool definition.';
   }
 
@@ -655,7 +899,20 @@ export class ToolSystem {
       webSearch: 'Search the web with customizable parameters',
       fetchUrl: 'Fetch and extract content from web pages',
       analyzeText: 'Analyze text for patterns, statistics, and summaries',
-      fileSearch: 'Search files and directories for text patterns'
+      fileSearch: 'Search files and directories for text patterns',
+      // Tavily tools
+      tavilySearch: 'Advanced web search using Tavily AI with answer extraction',
+      tavilyQuickSearch: 'Fast web search for quick information gathering',
+      tavilyAdvancedSearch: 'Comprehensive search with maximum detail and content',
+      tavilyNewsSearch: 'Search for recent news articles and current events',
+      tavilyAcademicSearch: 'Search for scholarly articles and research papers',
+      tavilyImageSearch: 'Search for images with descriptions and metadata',
+      tavilyVideoSearch: 'Search for videos from major platforms',
+      tavilyExtractAnswer: 'Extract specific answers to questions from web content',
+      tavilyCrawlUrls: 'Crawl specific URLs to extract their content',
+      tavilyMultiSearch: 'Perform multiple searches in parallel',
+      tavilyGetSuggestions: 'Get search suggestions and related queries',
+      tavilyLocationSearch: 'Search for location-specific information'
     };
     return descriptions[toolName] || 'Unknown tool';
   }
@@ -739,5 +996,279 @@ export class ToolSystem {
 
   _delay(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  // TAVILY SEARCH IMPLEMENTATIONS
+
+  async tavilySearch(query, options = {}) {
+    if (!this.tavilyClient) {
+      return {
+        success: false,
+        error: 'Tavily client not initialized. Please provide a valid API key.',
+        code: 'TAVILY_NOT_INITIALIZED'
+      };
+    }
+
+    try {
+      const result = await this.tavilyClient.search(query, options);
+      return this._formatToolResponse('tavily_search', result, options.responseFormat);
+    } catch (error) {
+      return this._createGuidedError(error, 'tavily_search', [
+        'Check your Tavily API key is valid',
+        'Verify the search query is properly formatted',
+        'Try with a simpler search query'
+      ]);
+    }
+  }
+
+  async tavilyQuickSearch(query, options = {}) {
+    if (!this.tavilyClient) {
+      return {
+        success: false,
+        error: 'Tavily client not initialized. Please provide a valid API key.',
+        code: 'TAVILY_NOT_INITIALIZED'
+      };
+    }
+
+    try {
+      const result = await this.tavilyClient.quickSearch(query, options);
+      return this._formatToolResponse('tavily_quick_search', result, options.responseFormat);
+    } catch (error) {
+      return this._createGuidedError(error, 'tavily_quick_search', [
+        'Check your Tavily API key is valid',
+        'Verify the search query is properly formatted'
+      ]);
+    }
+  }
+
+  async tavilyAdvancedSearch(query, options = {}) {
+    if (!this.tavilyClient) {
+      return {
+        success: false,
+        error: 'Tavily client not initialized. Please provide a valid API key.',
+        code: 'TAVILY_NOT_INITIALIZED'
+      };
+    }
+
+    try {
+      const result = await this.tavilyClient.advancedSearch(query, options);
+      return this._formatToolResponse('tavily_advanced_search', result, options.responseFormat);
+    } catch (error) {
+      return this._createGuidedError(error, 'tavily_advanced_search', [
+        'Check your Tavily API key is valid',
+        'Consider reducing maxResults or includeRawContent options',
+        'Verify search query is not too complex'
+      ]);
+    }
+  }
+
+  async tavilyNewsSearch(query, options = {}) {
+    if (!this.tavilyClient) {
+      return {
+        success: false,
+        error: 'Tavily client not initialized. Please provide a valid API key.',
+        code: 'TAVILY_NOT_INITIALIZED'
+      };
+    }
+
+    try {
+      const result = await this.tavilyClient.newsSearch(query, options);
+      return this._formatToolResponse('tavily_news_search', result, options.responseFormat);
+    } catch (error) {
+      return this._createGuidedError(error, 'tavily_news_search', [
+        'Check your Tavily API key is valid',
+        'Try with broader news-related terms',
+        'Check if the topic has recent news coverage'
+      ]);
+    }
+  }
+
+  async tavilyAcademicSearch(query, options = {}) {
+    if (!this.tavilyClient) {
+      return {
+        success: false,
+        error: 'Tavily client not initialized. Please provide a valid API key.',
+        code: 'TAVILY_NOT_INITIALIZED'
+      };
+    }
+
+    try {
+      const result = await this.tavilyClient.academicSearch(query, options);
+      return this._formatToolResponse('tavily_academic_search', result, options.responseFormat);
+    } catch (error) {
+      return this._createGuidedError(error, 'tavily_academic_search', [
+        'Check your Tavily API key is valid',
+        'Use academic or technical terminology',
+        'Try searching for specific research topics or papers'
+      ]);
+    }
+  }
+
+  async tavilyImageSearch(query, options = {}) {
+    if (!this.tavilyClient) {
+      return {
+        success: false,
+        error: 'Tavily client not initialized. Please provide a valid API key.',
+        code: 'TAVILY_NOT_INITIALIZED'
+      };
+    }
+
+    try {
+      const result = await this.tavilyClient.imageSearch(query, options);
+      return this._formatToolResponse('tavily_image_search', result, options.responseFormat);
+    } catch (error) {
+      return this._createGuidedError(error, 'tavily_image_search', [
+        'Check your Tavily API key is valid',
+        'Use descriptive image-related keywords',
+        'Try more visual or descriptive search terms'
+      ]);
+    }
+  }
+
+  async tavilyVideoSearch(query, options = {}) {
+    if (!this.tavilyClient) {
+      return {
+        success: false,
+        error: 'Tavily client not initialized. Please provide a valid API key.',
+        code: 'TAVILY_NOT_INITIALIZED'
+      };
+    }
+
+    try {
+      const result = await this.tavilyClient.videoSearch(query, options);
+      return this._formatToolResponse('tavily_video_search', result, options.responseFormat);
+    } catch (error) {
+      return this._createGuidedError(error, 'tavily_video_search', [
+        'Check your Tavily API key is valid',
+        'Use video or tutorial-related keywords',
+        'Try searching for specific video topics'
+      ]);
+    }
+  }
+
+  async tavilyExtractAnswer(query, options = {}) {
+    if (!this.tavilyClient) {
+      return {
+        success: false,
+        error: 'Tavily client not initialized. Please provide a valid API key.',
+        code: 'TAVILY_NOT_INITIALIZED'
+      };
+    }
+
+    try {
+      const result = await this.tavilyClient.extractAnswer(query, options);
+      return this._formatToolResponse('tavily_extract_answer', result, options.responseFormat);
+    } catch (error) {
+      return this._createGuidedError(error, 'tavily_extract_answer', [
+        'Check your Tavily API key is valid',
+        'Phrase your query as a clear question',
+        'Try simpler or more specific questions'
+      ]);
+    }
+  }
+
+  async tavilyCrawlUrls(urls, options = {}) {
+    if (!this.tavilyClient) {
+      return {
+        success: false,
+        error: 'Tavily client not initialized. Please provide a valid API key.',
+        code: 'TAVILY_NOT_INITIALIZED'
+      };
+    }
+
+    try {
+      const result = await this.tavilyClient.crawlUrls(urls, options);
+      return this._formatToolResponse('tavily_crawl_urls', result, options.responseFormat);
+    } catch (error) {
+      return this._createGuidedError(error, 'tavily_crawl_urls', [
+        'Check your Tavily API key is valid',
+        'Verify all URLs are accessible and properly formatted',
+        'Try with fewer URLs or simpler content extraction options'
+      ]);
+    }
+  }
+
+  async tavilyMultiSearch(searches, options = {}) {
+    if (!this.tavilyClient) {
+      return {
+        success: false,
+        error: 'Tavily client not initialized. Please provide a valid API key.',
+        code: 'TAVILY_NOT_INITIALIZED'
+      };
+    }
+
+    try {
+      const result = await this.tavilyClient.multiSearch(searches, options);
+      return this._formatToolResponse('tavily_multi_search', result, options.responseFormat);
+    } catch (error) {
+      return this._createGuidedError(error, 'tavily_multi_search', [
+        'Check your Tavily API key is valid',
+        'Verify all search queries are properly formatted',
+        'Try with fewer simultaneous searches'
+      ]);
+    }
+  }
+
+  async tavilyGetSuggestions(query, options = {}) {
+    if (!this.tavilyClient) {
+      return {
+        success: false,
+        error: 'Tavily client not initialized. Please provide a valid API key.',
+        code: 'TAVILY_NOT_INITIALIZED'
+      };
+    }
+
+    try {
+      const result = await this.tavilyClient.getSuggestions(query, options);
+      return this._formatToolResponse('tavily_get_suggestions', result, options.responseFormat);
+    } catch (error) {
+      return this._createGuidedError(error, 'tavily_get_suggestions', [
+        'Check your Tavily API key is valid',
+        'Try with simpler base queries'
+      ]);
+    }
+  }
+
+  async tavilyLocationSearch(query, location, options = {}) {
+    if (!this.tavilyClient) {
+      return {
+        success: false,
+        error: 'Tavily client not initialized. Please provide a valid API key.',
+        code: 'TAVILY_NOT_INITIALIZED'
+      };
+    }
+
+    try {
+      const result = await this.tavilyClient.locationSearch(query, location, options);
+      return this._formatToolResponse('tavily_location_search', result, options.responseFormat);
+    } catch (error) {
+      return this._createGuidedError(error, 'tavily_location_search', [
+        'Check your Tavily API key is valid',
+        'Verify the location is specified correctly',
+        'Try with more general location terms'
+      ]);
+    }
+  }
+
+  // Test Tavily connection
+  async testTavilyConnection() {
+    if (!this.tavilyClient) {
+      return {
+        success: false,
+        error: 'Tavily client not initialized. Please provide a valid API key.',
+        code: 'TAVILY_NOT_INITIALIZED'
+      };
+    }
+
+    try {
+      const result = await this.tavilyClient.testConnection();
+      return result;
+    } catch (error) {
+      return {
+        success: false,
+        error: error.message,
+        code: 'TAVILY_CONNECTION_FAILED'
+      };
+    }
   }
 }

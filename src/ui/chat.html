@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat with Tiny Autonomous Research Agent</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="chat.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div id="app">
+        <!-- Header Settings Panel -->
+        <header class="chat-header">
+            <div class="header-content">
+                <div class="title-section">
+                    <h1>🤖 Tiny Agent</h1>
+                    <span class="status-text">Initializing...</span>
+                    <span class="connection-indicator" id="connection-status"></span>
+                </div>
+                <div class="header-controls">
+                    <button id="settings-btn" class="btn btn-secondary">⚙️ Settings</button>
+                    <button id="clear-chat-btn" class="btn btn-secondary">🗑️ Clear</button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Chat Area -->
+        <main class="chat-main">
+            <div class="chat-container">
+                <!-- Message List -->
+                <div id="message-list" class="message-list">
+                    <!-- Messages will appear here -->
+                </div>
+
+                <!-- Typing Indicator -->
+                <div id="typing-indicator" class="typing-indicator">
+                    <div class="typing-bubble">
+                        <div class="typing-dot"></div>
+                        <div class="typing-dot"></div>
+                        <div class="typing-dot"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Input Area -->
+            <div class="input-container">
+                <form id="chat-form" class="chat-form">
+                    <div class="input-row">
+                        <button type="button" id="file-upload-btn" class="btn btn-ghost" title="Upload file">
+                            📎
+                            <input type="file" id="file-input" accept=".txt,.md,.pdf,.doc,.docx,.py,.js,.ts,.json" multiple hidden>
+                        </button>
+                        <textarea 
+                            id="message-input" 
+                            placeholder="Ask me to research anything..."
+                            rows="1"
+                            class="message-input"
+                        ></textarea>
+                        <button type="submit" id="send-btn" class="btn btn-primary" disabled>
+                            ➤ Send
+                        </button>
+                    </div>
+                    <div class="input-helper">
+                        <span class="hint">Press Enter to send, Shift+Enter for new line</span>
+                    </div>
+                </form>
+            </div>
+        </main>
+
+        <!-- Settings Modal -->
+        <div id="settings-modal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>⚙️ Settings</h3>
+                    <button class="close-btn" onclick="closeSettingsModal()">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <form id="settings-form">
+                        <!-- LLM Provider Selection -->
+                        <div class="form-group">
+                            <label for="llm-provider-select">LLM Provider</label>
+                            <select id="llm-provider-select">
+                                <option value="lmstudio">LM Studio (Local)</option>
+                                <option value="openrouter">OpenRouter (Cloud)</option>
+                            </select>
+                        </div>
+                        
+                        <!-- LM Studio Settings -->
+                        <div id="lmstudio-settings" class="provider-settings">
+                            <h4 style="margin-top: 0; margin-bottom: 1rem; color: #1f2937;">LM Studio Configuration</h4>
+                            <div class="form-group">
+                                <label for="lm-studio-url">LM Studio URL</label>
+                                <input 
+                                    type="url" 
+                                    id="lm-studio-url" 
+                                    value="http://localhost:1234"
+                                    placeholder="http://localhost:1234"
+                                >
+                                <small style="color: #6b7280; font-size: 0.875rem;">
+                                    Make sure LM Studio is running with the server started.
+                                </small>
+                            </div>
+                        </div>
+                        
+                        <!-- OpenRouter Settings -->
+                        <div id="openrouter-settings" class="provider-settings hidden">
+                            <h4 style="margin-top: 0; margin-bottom: 1rem; color: #1f2937;">OpenRouter Configuration</h4>
+                            <div class="form-group">
+                                <label for="openrouter-api-key">OpenRouter API Key</label>
+                                <input 
+                                    type="password" 
+                                    id="openrouter-api-key" 
+                                    placeholder="sk-or-v1-your-key-here"
+                                >
+                                <small style="color: #6b7280; font-size: 0.875rem;">
+                                    Get your API key from <a href="https://openrouter.ai" target="_blank">openrouter.ai</a>
+                                </small>
+                            </div>
+                            <div class="form-group">
+                                <label for="openrouter-model">Model</label>
+                                <select id="openrouter-model">
+                                    <option value="anthropic/claude-3.5-sonnet">Claude 3.5 Sonnet (Recommended)</option>
+                                    <option value="anthropic/claude-3-opus">Claude 3 Opus</option>
+                                    <option value="anthropic/claude-3-haiku">Claude 3 Haiku</option>
+                                    <option value="openai/gpt-4-turbo">GPT-4 Turbo</option>
+                                    <option value="openai/gpt-3.5-turbo">GPT-3.5 Turbo</option>
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <!-- Agent Settings -->
+                        <div class="form-group">
+                            <label for="max-concurrent-tasks">Max Concurrent Tasks</label>
+                            <input 
+                                type="number" 
+                                id="max-concurrent-tasks" 
+                                min="1" 
+                                max="10" 
+                                value="3"
+                            >
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="auto-cleanup" checked>
+                                Enable automatic cleanup
+                            </label>
+                        </div>
+                        
+                        <!-- Connection Test -->
+                        <div class="form-actions">
+                            <button type="button" id="test-connection-btn" class="btn btn-secondary">
+                                🔍 Test Connection
+                            </button>
+                        </div>
+                        
+                        <!-- Connection Status -->
+                        <div id="connection-status-info" class="status-info">
+                            <span>Connection status: Unknown</span>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" onclick="closeSettingsModal()">Cancel</button>
+                    <button class="btn btn-primary" onclick="saveSettings()">Save Settings</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Upload Preview Modal -->
+        <div id="upload-modal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>📎 File Upload</h3>
+                    <button class="close-btn" onclick="closeUploadModal()">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div id="upload-preview" class="file-preview">
+                        <!-- File preview will appear here -->
+                    </div>
+                    <div class="upload-actions">
+                        <button id="upload-submit-btn" class="btn btn-primary">Upload & Analyze</button>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" onclick="closeUploadModal()">Cancel</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- File Upload Progress -->
+        <div id="upload-progress" class="upload-progress" style="display: none;">
+            <div class="progress-content">
+                <div class="progress-bar">
+                    <div class="progress-fill" style="width: 0%"></div>
+                </div>
+                <div class="progress-text">Uploading...</div>
+            </div>
+        </div>
+
+        <!-- Toast Container for Notifications -->
+        <div id="toast-container" class="toast-container"></div>
+
+        <!-- Message Templates (Initially Hidden) -->
+        <template id="message-template">
+            <div class="message-container">
+                <div class="message-avatar">
+                    <div class="avatar avatar-agent">🤖</div>
+                    <div class="avatar avatar-user">👤</div>
+                </div>
+                <div class="message-content">
+                    <div class="message-header">
+                        <span class="message-sender"></span>
+                        <span class="message-time"></span>
+                        <span class="message-status"></span>
+                    </div>
+                    <div class="message-body"></div>
+                    <div class="message-actions">
+                        <button class="btn btn-ghost copy-btn">📋</button>
+                    </div>
+                </div>
+            </div>
+        </template>
+
+        <!-- System Message Template -->
+        <template id="system-message-template">
+            <div class="message-container system">
+                <div class="message-content system-content">
+                    <div class="message-header">
+                        <span class="type-badge"></span>
+                        <span class="message-time"></span>
+                    </div>
+                    <div class="message-body"></div>
+                </div>
+            </div>
+        </template>
+    </div>
+    
+    <!-- Load ChatManager first, then chat app -->
+    <script src="ChatManager.js"></script>
+    <script src="chat.js"></script>
+</body>
+</html>

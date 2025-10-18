@@ -16,6 +16,7 @@ const agent = new AutonomousAgent({
     fallback: true,
     lmStudio: {
       baseUrl: 'http://localhost:1234',
+      model: 'ibm/granite-4-h-micro',  // IBM Granite 4-H Micro model
       timeout: 30000
     },
     openrouter: {
@@ -281,6 +282,50 @@ async function handleWebSocketRequest(ws, request) {
     let response;
 
     switch (type) {
+      case 'chat.message':
+        // Broadcast user message immediately
+        broadcast({
+          type: 'chat.message',
+          data: {
+            id: Date.now(),
+            type: 'user',
+            sender: 'You',
+            content: data.content,
+            timestamp: new Date().toISOString()
+          }
+        });
+        
+        // Process with LLM and respond
+        try {
+          const llmResponse = await handleChatMessage(data.content);
+          
+          broadcast({
+            type: 'chat.message',
+            data: {
+              id: Date.now() + 1,
+              type: 'agent',
+              sender: 'Agent',
+              content: llmResponse,
+              timestamp: new Date().toISOString()
+            }
+          });
+        } catch (chatError) {
+          broadcast({
+            type: 'chat.message',
+            data: {
+              id: Date.now() + 1,
+              type: 'agent',
+              sender: 'Agent',
+              content: `I encountered an error: ${chatError.message}`,
+              timestamp: new Date().toISOString()
+            }
+          });
+        }
+        
+        // Don't send a direct response for chat messages
+        response = null;
+        break;
+
       case 'research.start':
         response = await agent.startResearch(data.goal, data.options);
         break;
@@ -313,22 +358,72 @@ async function handleWebSocketRequest(ws, request) {
         response = { success: true };
         break;
 
+      case 'projects.list':
+        response = {
+          active: Array.from(agent.activeProjects.entries()).map(([id, project]) => ({
+            id,
+            goal: project.goal,
+            status: project.status,
+            startTime: project.startTime
+          })),
+          completed: Array.from(agent.completedProjects.entries()).map(([id, project]) => ({
+            id,
+            goal: project.goal,
+            status: project.status,
+            startTime: project.startTime,
+            endTime: project.endTime
+          }))
+        };
+        break;
+
       default:
         throw new Error(`Unknown request type: ${type}`);
     }
 
-    ws.send(JSON.stringify({
-      type: 'response',
-      id,
-      data: response
-    }));
+    if (id && response !== null) {
+      ws.send(JSON.stringify({
+        type: 'response',
+        id,
+        data: { success: true, ...response }
+      }));
+    }
 
   } catch (error) {
-    ws.send(JSON.stringify({
-      type: 'error',
-      id,
-      error: error.message
-    }));
+    if (id) {
+      ws.send(JSON.stringify({
+        type: 'response',
+        id,
+        data: { success: false, error: error.message }
+      }));
+    }
+  }
+}
+
+// Handle chat message processing
+async function handleChatMessage(content) {
+  try {
+    // Check if message contains URLs
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    const urls = content.match(urlRegex);
+    
+    // Enhance prompt with URL context if present
+    let prompt = content;
+    if (urls && urls.length > 0) {
+      const urlList = urls.map(url => `- ${url}`).join('\n');
+      prompt = `The user shared these links:\n${urlList}\n\nUser's message: ${content.replace(urlRegex, '').trim() || 'Please analyze these links'}`;
+    }
+    
+    // Get actual LLM response
+    const response = await agent.llmClient.generate(prompt, {
+      temperature: 0.7,
+      maxTokens: 1000
+    });
+    
+    return response.content;
+    
+  } catch (error) {
+    console.error('Chat message processing error:', error);
+    throw error;
   }
 }
 
