@@ -68,6 +68,7 @@ agent_output/
 !.gitignore
 !README.md
 !ENHANCED_CAPABILITIES.md
+!IMPLEMENTATION_SUMMARY.md
 !package.json
 !src/**/*.md
 
