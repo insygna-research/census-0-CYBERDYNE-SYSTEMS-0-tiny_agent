@@ -1,28 +1,34 @@
 import express from 'express';
 import { WebSocketServer } from 'ws';
 import { AutonomousAgent } from './core/AutonomousAgent.js';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
-// Initialize the autonomous agent
+// Initialize the enhanced autonomous agent with all advanced capabilities
 const agent = new AutonomousAgent({
   workDirectory: './agent_workspace',
-  maxConcurrentTasks: 2,
+  maxConcurrentTasks: 3,
   autoCleanup: true,
   memoryOptions: {
-    maxShortTermSize: 800,
-    maxLongTermSize: 8000
+    maxShortTermSize: 1000,
+    maxLongTermSize: 10000
   },
   llmConfig: {
     defaultProvider: 'lmstudio',
     fallback: true,
     lmStudio: {
       baseUrl: 'http://localhost:1234',
-      model: 'ibm/granite-4-h-micro',  // IBM Granite 4-H Micro model
+      model: 'ibm/granite-4-h-micro',
       timeout: 30000
     },
     openrouter: {
       model: 'anthropic/claude-3.5-sonnet',
       timeout: 60000
     }
+  },
+  toolConfig: {
+    tavilyApiKey: process.env.TAVILY_API_KEY,
+    enableAdvancedTools: true
   }
 });
 
@@ -438,8 +444,188 @@ function broadcast(message) {
   }
 }
 
-// Serve static files (for future web UI)
+// Serve enhanced UI files
+app.use('/enhanced', express.static('src/ui'));
+
+// Serve original UI for compatibility
 app.use(express.static('dist'));
+
+// Enhanced UI routes
+app.get('/enhanced', (req, res) => {
+  res.sendFile(path.join(__dirname, 'src/ui/enhanced-app.html'));
+});
+
+app.get('/enhanced/components/:component', (req, res) => {
+  const componentPath = path.join(__dirname, 'src/ui/components', req.params.component);
+  res.sendFile(componentPath);
+});
+
+// Advanced API endpoints for enhanced capabilities
+app.post('/api/strategic/create', async (req, res) => {
+  try {
+    const { goal, options } = req.body;
+    if (!goal) {
+      return res.status(400).json({ success: false, error: 'Goal is required' });
+    }
+
+    const result = await agent.createStrategicPlan(goal, options);
+    res.json({ success: true, data: result });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/strategic/:planId/execute', async (req, res) => {
+  try {
+    const { planId } = req.params;
+    const result = await agent.executeStrategicPlan(planId, req.body);
+    res.json({ success: true, data: result });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/strategic/plans', async (req, res) => {
+  try {
+    const plans = Array.from(agent.strategicPlanner.getActivePlans()).map(([id, plan]) => ({
+      id,
+      goal: plan.goal,
+      status: plan.status,
+      phases: plan.hierarchy?.phases?.length || 0,
+      createdAt: plan.createdAt,
+      metadata: plan.metadata
+    }));
+
+    res.json({ success: true, data: plans });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/deliverables/create', async (req, res) => {
+  try {
+    const { projectId, options } = req.body;
+    if (!projectId) {
+      return res.status(400).json({ success: false, error: 'Project ID is required' });
+    }
+
+    const result = await agent.deliverableSystem.createInteractiveDeliverable(projectId, options);
+    res.json({ success: true, data: result });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/deliverables', async (req, res) => {
+  try {
+    const deliverables = Array.from(agent.deliverableSystem.getActiveDeliverables()).map(([id, deliverable]) => ({
+      id,
+      type: deliverable.type,
+      title: deliverable.content?.structure?.title || 'Untitled',
+      sections: deliverable.content?.sections?.length || 0,
+      status: deliverable.status,
+      createdAt: deliverable.createdAt
+    }));
+
+    res.json({ success: true, data: deliverables });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/deliverables/:deliverableId/edit', async (req, res) => {
+  try {
+    const { deliverableId, sectionId, edits, options } = req.body;
+    const result = await agent.deliverableSystem.editDeliverableSection(deliverableId, sectionId, edits, options);
+    res.json({ success: true, data: result });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/deliverables/:deliverableId/export', async (req, res) => {
+  try {
+    const { deliverableId, format } = req.body;
+    const result = await agent.deliverableSystem.exportDeliverable(deliverableId, format, options);
+    res.json({ success: true, data: result });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/memory/status', async (req, res) => {
+  try {
+    const stats = agent.advancedMemory.getMemoryStats();
+    res.json({ success: true, data: stats });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/memory/compress', async (req, res) => {
+  try {
+    await agent.advancedMemory.cleanupOldMemories();
+    res.json({ success: true, message: 'Memory compression completed' });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/session/create', async (req, res) => {
+  try {
+    const { sessionId, goal, context } = req.body;
+    const result = await agent.createSessionMemory(sessionId, goal, context);
+    res.json({ success: true, data: result });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/session/:sessionId/update', async (req, res) => {
+  try {
+    const { sessionId, experience } = req.body;
+    const result = await agent.updateSessionMemory(sessionId, experience);
+    res.json({ success: true, data: result });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/learning/analytics', async (req, res) => {
+  try {
+    const analytics = agent.continuousLearning.getLearningStats();
+    res.json({ success: true, data: analytics });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/learning/adapt', async (req, res) => {
+  try {
+    const result = await agent.adaptSystemBehavior();
+    res.json({ success: true, data: result });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/error/recovery/status', async (req, res) => {
+  try {
+    const stats = agent.errorRecovery.getErrorStats();
+    res.json({ success: true, data: stats });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/agent/advanced-status', async (req, res) => {
+  try {
+    const status = agent.getAdvancedStatus();
+    res.json({ success: true, data: status });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
 
 // Handle graceful shutdown
 process.on('SIGINT', async () => {

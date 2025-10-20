@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agent Command Center - Advanced Research Assistant</title>
+    <link rel="stylesheet" href="enhanced-styles.css">
+    <link rel="stylesheet" href="components/enhanced-components.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='50%' font-size='50' text-anchor='middle'>🧠</text></svg>">
+</head>
+<body>
+    <div id="app" class="app-container">
+        <!-- Unified Navigation (will be inserted by JavaScript) -->
+
+        <!-- Main Content Area -->
+        <main id="main-content" class="main-content">
+            <!-- Dashboard View -->
+            <div id="dashboard-view" class="main-view active">
+                <div class="view-header">
+                    <div class="header-content">
+                        <h1 class="view-title">Command Center</h1>
+                        <p class="view-subtitle">Monitor and control your advanced autonomous research agent</p>
+                    </div>
+                    <div class="header-actions">
+                        <button class="btn btn-primary" onclick="startNewResearch()">
+                            <svg class="btn-icon" viewBox="0 0 24 24">
+                                <path d="M12 2v20M2 12h20" stroke="currentColor" stroke-width="2"/>
+                            </svg>
+                            New Research
+                        </button>
+                        <button class="btn btn-secondary" onclick="createStrategicPlan()">
+                            <svg class="btn-icon" viewBox="0 0 24 24">
+                                <path d="M3 3h18v18H3z" stroke="currentColor" stroke-width="2"/>
+                                <path d="M9 3v18m6-18v18" stroke="currentColor" stroke-width="2"/>
+                            </svg>
+                            Strategic Plan
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Agent Status Overview -->
+                <section class="status-overview">
+                    <div class="status-grid">
+                        <div class="status-card primary">
+                            <div class="card-header">
+                                <h3>Agent Status</h3>
+                                <div class="status-indicator online"></div>
+                            </div>
+                            <div class="card-content">
+                                <div class="status-metric">
+                                    <span class="metric-label">Current State</span>
+                                    <span class="metric-value" id="agent-state">Ready</span>
+                                </div>
+                                <div class="status-metric">
+                                    <span class="metric-label">Active Projects</span>
+                                    <span class="metric-value" id="active-projects">0</span>
+                                </div>
+                                <div class="status-metric">
+                                    <span class="metric-label">Performance</span>
+                                    <div class="performance-bar">
+                                        <div class="performance-fill" style="width: 85%"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="status-card">
+                            <div class="card-header">
+                                <h3>Cognitive Metrics</h3>
+                                <div class="cognitive-indicator active"></div>
+                            </div>
+                            <div class="card-content">
+                                <div class="cognitive-chart">
+                                    <canvas id="cognitive-chart"></canvas>
+                                </div>
+                                <div class="cognitive-stats">
+                                    <div class="stat">
+                                        <span class="stat-label">Memory Usage</span>
+                                        <span class="stat-value">67%</span>
+                                    </div>
+                                    <div class="stat">
+                                        <span class="stat-label">Processing Load</span>
+                                        <span class="stat-value">42%</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="status-card">
+                            <div class="card-header">
+                                <h3>Learning Activity</h3>
+                                <div class="learning-indicator pulse"></div>
+                            </div>
+                            <div class="card-content">
+                                <div class="learning-stats">
+                                    <div class="learning-metric">
+                                        <span class="metric-number">12</span>
+                                        <span class="metric-label">Cycles Completed</span>
+                                    </div>
+                                    <div class="learning-metric">
+                                        <span class="metric-number">94%</span>
+                                        <span class="metric-label">Success Rate</span>
+                                    </div>
+                                    <div class="learning-metric">
+                                        <span class="metric-number">8</span>
+                                        <span class="metric-label">Active Optimizations</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Active Projects -->
+                <section class="projects-section">
+                    <div class="section-header">
+                        <h2>Active Research Projects</h2>
+                        <div class="section-actions">
+                            <button class="btn btn-ghost" onclick="filterProjects('all')">All</button>
+                            <button class="btn btn-ghost" onclick="filterProjects('strategic')">Strategic</button>
+                            <button class="btn btn-ghost" onclick="filterProjects('chat')">Chat</button>
+                        </div>
+                    </div>
+                    <div id="projects-container" class="projects-grid">
+                        <div class="empty-state">
+                            <div class="empty-icon">🚀</div>
+                            <h3>No Active Projects</h3>
+                            <p>Start your first advanced research project to see it here</p>
+                            <button class="btn btn-primary" onclick="startNewResearch()">Start Research</button>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Quick Actions -->
+                <section class="quick-actions-section">
+                    <h2>Quick Actions</h2>
+                    <div class="quick-actions-grid">
+                        <button class="quick-action-card" onclick="showDeliverableCreator()">
+                            <div class="action-icon">📄</div>
+                            <h3>Create Deliverable</h3>
+                            <p>Generate professional research reports</p>
+                        </button>
+                        <button class="quick-action-card" onclick="showMemoryLab()">
+                            <div class="action-icon">🧠</div>
+                            <h3>Memory Lab</h3>
+                            <p>Explore and manage agent memory</p>
+                        </button>
+                        <button class="quick-action-card" onclick="showPerformanceMonitor()">
+                            <div class="action-icon">📊</div>
+                            <h3>Performance Monitor</h3>
+                            <p>Real-time agent analytics</p>
+                        </button>
+                        <button class="quick-action-card" onclick="showRecoveryCenter()">
+                            <div class="action-icon">🔄</div>
+                            <h3>Recovery Center</h3>
+                            <p>Error recovery and adaptation</p>
+                        </button>
+                    </div>
+                </section>
+            </div>
+
+            <!-- Chat View -->
+            <div id="chat-view" class="main-view">
+                <div class="chat-container">
+                    <div class="chat-header">
+                        <div class="header-content">
+                            <h2>AI Research Assistant</h2>
+                            <p class="chat-subtitle">Advanced conversational research interface</p>
+                        </div>
+                        <div class="chat-controls">
+                            <button class="btn btn-ghost" onclick="toggleChatSettings()">
+                                <svg class="btn-icon" viewBox="0 0 24 24">
+                                    <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/>
+                                    <path d="M12 1v6m0 6v6m4.22-13.22l4.24 4.24M1.54 1.54l4.24 4.24M1 12h6m6 0h6" stroke="currentColor" stroke-width="2"/>
+                                </svg>
+                            </button>
+                            <button class="btn btn-ghost" onclick="clearChat()">
+                                <svg class="btn-icon" viewBox="0 0 24 24">
+                                    <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6h14zM10 11v6M14 11v6" stroke="currentColor" stroke-width="2"/>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="chat-main">
+                        <div class="messages-container" id="chat-messages">
+                            <div class="welcome-message">
+                                <div class="welcome-content">
+                                    <div class="welcome-icon">🤖</div>
+                                    <h3>Welcome to your Advanced Research Assistant</h3>
+                                    <p>I can help you with:</p>
+                                    <ul class="capabilities-list">
+                                        <li>🔍 Complex research projects with strategic planning</li>
+                                        <li>📊 Professional deliverable generation</li>
+                                        <li>🧠 Advanced memory and learning capabilities</li>
+                                        <li>🔄 Intelligent error recovery and adaptation</li>
+                                        <li>📈 Performance optimization and analytics</li>
+                                    </ul>
+                                    <div class="quick-suggestions">
+                                        <button class="suggestion-chip" onclick="sendSuggestion('Start a strategic research plan')">
+                                            Start Strategic Research
+                                        </button>
+                                        <button class="suggestion-chip" onclick="sendSuggestion('Analyze current market trends')">
+                                            Market Analysis
+                                        </button>
+                                        <button class="suggestion-chip" onclick="sendSuggestion('Generate a research report')">
+                                            Generate Report
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="chat-input-container">
+                            <form id="chat-form" class="chat-form">
+                                <div class="input-row">
+                                    <button type="button" class="btn btn-ghost" onclick="attachFile()" title="Attach file">
+                                        <svg class="btn-icon" viewBox="0 0 24 24">
+                                            <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" stroke="currentColor" stroke-width="2"/>
+                                        </svg>
+                                        <input type="file" id="file-input" multiple accept=".txt,.md,.pdf,.doc,.docx,.py,.js,.ts,.json" hidden>
+                                    </button>
+                                    <textarea
+                                        id="chat-input"
+                                        placeholder="Ask me anything about advanced research..."
+                                        rows="1"
+                                        class="message-input"
+                                    ></textarea>
+                                    <button type="submit" class="btn btn-primary send-btn" disabled>
+                                        <svg class="btn-icon" viewBox="0 0 24 24">
+                                            <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" stroke="currentColor" stroke-width="2"/>
+                                        </svg>
+                                    </button>
+                                </div>
+                                <div class="input-suggestions">
+                                    <div class="suggestion-pills">
+                                        <button class="suggestion-pill" onclick="addSuggestion('Use strategic planning')">Use strategic planning</button>
+                                        <button class="suggestion-pill" onclick="addSuggestion('Generate deliverable')">Generate deliverable</button>
+                                        <button class="suggestion-pill" onclick="addSuggestion('Analyze with memory')">Analyze with memory</button>
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Strategic Planning View -->
+            <div id="strategic-view" class="main-view">
+                <div class="view-header">
+                    <div class="header-content">
+                        <h1 class="view-title">Strategic Planning</h1>
+                        <p class="view-subtitle">Create and manage long-horizon research strategies</p>
+                    </div>
+                    <div class="header-actions">
+                        <button class="btn btn-primary" onclick="createNewStrategicPlan()">
+                            <svg class="btn-icon" viewBox="0 0 24 24">
+                                <path d="M12 2v20M2 12h20" stroke="currentColor" stroke-width="2"/>
+                            </svg>
+                            New Plan
+                        </button>
+                    </div>
+                </div>
+
+                <section class="strategic-overview">
+                    <div class="strategic-grid">
+                        <div class="strategic-card">
+                            <h3>Active Plans</h3>
+                            <div class="plan-count" id="active-plans-count">0</div>
+                            <p>Currently executing</p>
+                        </div>
+                        <div class="strategic-card">
+                            <h3>Completed Phases</h3>
+                            <div class="phase-count" id="completed-phases">0</div>
+                            <p>This week</p>
+                        </div>
+                        <div class="strategic-card">
+                            <h3>Success Rate</h3>
+                            <div class="success-rate" id="strategic-success">92%</div>
+                            <p>Overall performance</p>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="strategic-plans">
+                    <h2>Strategic Plans</h2>
+                    <div id="strategic-plans-container" class="plans-list">
+                        <div class="empty-state">
+                            <div class="empty-icon">📋</div>
+                            <h3>No Strategic Plans</h3>
+                            <p>Create your first strategic research plan to get started</p>
+                            <button class="btn btn-primary" onclick="createNewStrategicPlan()">Create Plan</button>
+                        </div>
+                    </div>
+                </section>
+            </div>
+
+            <!-- Memory Lab View -->
+            <div id="memory-view" class="main-view">
+                <div class="view-header">
+                    <div class="header-content">
+                        <h1 class="view-title">Memory Laboratory</h1>
+                        <p class="view-subtitle">Explore agent's advanced memory and knowledge systems</p>
+                    </div>
+                    <div class="header-actions">
+                        <button class="btn btn-secondary" onclick="compressMemory()">
+                            <svg class="btn-icon" viewBox="0 0 24 24">
+                                <path d="M4 6h16M4 12h16m-7 6h7" stroke="currentColor" stroke-width="2"/>
+                            </svg>
+                            Compress
+                        </button>
+                    </div>
+                </div>
+
+                <div class="memory-lab-grid">
+                    <section class="memory-section">
+                        <h3>Semantic Memory</h3>
+                        <div class="memory-stats">
+                            <div class="memory-stat">
+                                <span class="stat-number" id="semantic-concepts">0</span>
+                                <span class="stat-label">Concepts</span>
+                            </div>
+                            <div class="memory-stat">
+                                <span class="stat-number" id="knowledge-graph-nodes">0</span>
+                                <span class="stat-label">Knowledge Nodes</span>
+                            </div>
+                        </div>
+                        <div class="memory-visualization">
+                            <canvas id="knowledge-graph-canvas"></canvas>
+                        </div>
+                    </section>
+
+                    <section class="memory-section">
+                        <h3>Session Memory</h3>
+                        <div class="session-list" id="session-list">
+                            <div class="empty-state">
+                                <p>No active sessions</p>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="memory-section">
+                        <h3>Memory Analytics</h3>
+                        <div class="memory-charts">
+                            <canvas id="memory-usage-chart"></canvas>
+                        </div>
+                    </section>
+                </div>
+            </div>
+
+            <!-- Additional views will be added similarly -->
+        </main>
+    </div>
+
+    <!-- Modals -->
+    <div id="modal-container" class="modal-container"></div>
+
+    <!-- Toast Container -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <!-- Scripts -->
+    <script src="components/UnifiedNavigation.js"></script>
+    <script src="enhanced-app.js"></script>
+</body>
+</html>
