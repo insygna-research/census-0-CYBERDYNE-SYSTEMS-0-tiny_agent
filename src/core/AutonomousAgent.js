@@ -1,9 +1,14 @@
 import { MemorySystem } from '../memory/MemorySystem.js';
+import { AdvancedMemoryManager } from '../memory/AdvancedMemoryManager.js';
 import { TaskManager } from './TaskManager.js';
+import { StrategicPlanner } from './StrategicPlanner.js';
 import { LLMClient } from '../llm/LLMClient.js';
 import { ToolSystem } from '../tools/ToolSystem.js';
 import { ReportGenerator } from './ReportGenerator.js';
+import { AdvancedDeliverableSystem } from './AdvancedDeliverableSystem.js';
 import { SubagentOrchestrator } from './SubagentOrchestrator.js';
+import { ErrorRecoverySystem } from './ErrorRecoverySystem.js';
+import { ContinuousLearningSystem } from './ContinuousLearningSystem.js';
 import { v4 as uuidv4 } from 'uuid';
 
 export class AutonomousAgent {
@@ -23,12 +28,20 @@ export class AutonomousAgent {
     this.tools = new ToolSystem(config.toolConfig || {});
     this.taskManager = new TaskManager(this.memory, this.llmClient);
     this.reportGenerator = new ReportGenerator(this.memory, this.tools);
-    
-    // ANTHROPIC INSIGHT: Initialize subagent orchestrator for parallel execution
+
+    // ANTHROPIC INSIGHT: Initialize advanced systems for long-horizon autonomy
+    this.advancedMemory = new AdvancedMemoryManager(this.memory, this.llmClient);
+    this.strategicPlanner = new StrategicPlanner(this.memory, this.llmClient);
+    this.deliverableSystem = new AdvancedDeliverableSystem(this.memory, this.tools, this.llmClient);
+    this.errorRecovery = new ErrorRecoverySystem(this.memory, this.llmClient, this.tools);
+    this.continuousLearning = new ContinuousLearningSystem(this.memory, this.llmClient, this.tools);
+
+    // Initialize subagent orchestrator for parallel execution
     this.subagentOrchestrator = new SubagentOrchestrator(this.memory, this.llmClient, this.tools);
-    
+
     // Set up memory system access to LLM for advanced features
     this.memory.llmClient = this.llmClient;
+    this.advancedMemory.llmClient = this.llmClient;
 
     // Agent state
     this.status = 'ready';
@@ -45,7 +58,11 @@ export class AutonomousAgent {
       memoryUsage: 0,
       uptime: Date.now(),
       subagentSessions: 0,
-      parallelExecutions: 0
+      parallelExecutions: 0,
+      strategicPlansCreated: 0,
+      errorRecoveriesHandled: 0,
+      learningCyclesCompleted: 0,
+      deliverablesGenerated: 0
     };
 
     // Initialize event handlers
@@ -601,11 +618,31 @@ export class AutonomousAgent {
       }
     });
 
-    // Error handling
-    this.on('error', ({ error }) => {
+    // Error handling with advanced recovery
+    this.on('error', async ({ error, context }) => {
       console.error('Agent Error:', error);
-      if (this.config.errorCallback) {
-        this.config.errorCallback(error);
+
+      // Handle error with advanced recovery system
+      try {
+        const recovery = await this.errorRecovery.handleError(error, context);
+        this.metrics.errorRecoveriesHandled++;
+
+        console.log(`🔄 Error recovery attempted: ${recovery.strategy.name}`);
+
+        // Store learning from error
+        await this.continuousLearning.recordTaskExecution({
+          task: context.task || 'unknown',
+          success: recovery.result.success,
+          duration: recovery.result.duration || 0,
+          errors: [error.message],
+          context: { ...context, recovery: recovery.strategy.name }
+        });
+
+      } catch (recoveryError) {
+        console.error('Error recovery failed:', recoveryError);
+        if (this.config.errorCallback) {
+          this.config.errorCallback(error);
+        }
       }
     });
 
@@ -617,5 +654,328 @@ export class AutonomousAgent {
     this.on('subtask.failed', ({ subtask, error }) => {
       console.log(`❌ Failed: ${subtask.title} - ${error}`);
     });
+
+    // Learning events
+    this.on('task.completed', async (data) => {
+      await this.continuousLearning.recordTaskExecution({
+        task: data.task || 'completed_task',
+        success: true,
+        duration: data.duration || 0,
+        tools: data.tools || [],
+        context: data.context || {}
+      });
+    });
+
+    // Strategic planning events
+    this.on('strategic_plan.created', (data) => {
+      this.metrics.strategicPlansCreated++;
+      console.log(`📋 Strategic plan created: ${data.planId}`);
+    });
+
+    // Deliverable events
+    this.on('deliverable.generated', (data) => {
+      this.metrics.deliverablesGenerated++;
+      console.log(`📄 Deliverable generated: ${data.deliverableId}`);
+    });
+  }
+
+  // ENHANCED LONG-HORIZON METHODS
+
+  /**
+   * Create strategic plan for complex research goals
+   */
+  async createStrategicPlan(goal, options = {}) {
+    try {
+      this._setStatus('planning');
+
+      const result = await this.strategicPlanner.createStrategicPlan(goal, {
+        ...options,
+        agentId: this.agentId,
+        toolsAvailable: this.tools.getToolDefinitions(),
+        workspace: this.config.workDirectory
+      });
+
+      if (result.success) {
+        this._emit('strategic_plan.created', {
+          planId: result.planId,
+          goal,
+          summary: result.summary
+        });
+      }
+
+      this._setStatus('ready');
+      return result;
+
+    } catch (error) {
+      this._setStatus('error');
+      this._emit('error', { error, context: { operation: 'create_strategic_plan', goal } });
+      throw error;
+    }
+  }
+
+  /**
+   * Execute strategic plan with adaptive management
+   */
+  async executeStrategicPlan(planId, options = {}) {
+    try {
+      this._setStatus('executing_strategic_plan');
+
+      const phases = [];
+      let currentPhase = await this.strategicPlanner.executeNextPhase(planId, {
+        ...options,
+        agentContext: this.getContext()
+      });
+
+      while (currentPhase && !currentPhase.completed) {
+        phases.push(currentPhase);
+
+        // Execute phase with error handling
+        try {
+          // Integrate with existing task execution system
+          const phaseResult = await this._executePhaseWithRecovery(currentPhase, planId);
+          currentPhase = phaseResult.nextPhase;
+
+        } catch (phaseError) {
+          console.error(`Phase execution failed:`, phaseError);
+          // Continue to next phase or stop based on error severity
+          if (currentPhase.critical) {
+            throw phaseError;
+          }
+          currentPhase = await this.strategicPlanner.executeNextPhase(planId, {
+            ...options,
+            skipFailed: true
+          });
+        }
+      }
+
+      this._setStatus('ready');
+      return {
+        success: true,
+        planId,
+        phases,
+        completed: true
+      };
+
+    } catch (error) {
+      this._setStatus('error');
+      this._emit('error', { error, context: { operation: 'execute_strategic_plan', planId } });
+      throw error;
+    }
+  }
+
+  /**
+   * Create interactive deliverable
+   */
+  async createInteractiveDeliverable(projectId, options = {}) {
+    try {
+      const result = await this.deliverableSystem.createInteractiveDeliverable(projectId, {
+        ...options,
+        agentId: this.agentId,
+        context: this.getContext()
+      });
+
+      if (result.success) {
+        this._emit('deliverable.generated', {
+          deliverableId: result.deliverableId,
+          projectId,
+          type: options.type || 'research_report'
+        });
+      }
+
+      return result;
+
+    } catch (error) {
+      this._emit('error', { error, context: { operation: 'create_deliverable', projectId } });
+      throw error;
+    }
+  }
+
+  /**
+   * Edit deliverable interactively
+   */
+  async editDeliverable(deliverableId, edits, options = {}) {
+    try {
+      return await this.deliverableSystem.editDeliverableSection(
+        deliverableId,
+        edits.sectionId,
+        edits,
+        options
+      );
+
+    } catch (error) {
+      this._emit('error', { error, context: { operation: 'edit_deliverable', deliverableId } });
+      throw error;
+    }
+  }
+
+  /**
+   * Export deliverable in multiple formats
+   */
+  async exportDeliverable(deliverableId, format, options = {}) {
+    try {
+      return await this.deliverableSystem.exportDeliverable(
+        deliverableId,
+        format,
+        {
+          ...options,
+        agentId: this.agentId
+        }
+      );
+
+    } catch (error) {
+      this._emit('error', { error, context: { operation: 'export_deliverable', deliverableId, format } });
+      throw error;
+    }
+  }
+
+  /**
+   * Get comprehensive agent status including advanced systems
+   */
+  getAdvancedStatus() {
+    const baseStatus = this.getStatus();
+
+    return {
+      ...baseStatus,
+      advancedSystems: {
+        advancedMemory: this.advancedMemory.getMemoryStats(),
+        strategicPlanner: this.strategicPlanner.getActivePlans(),
+        errorRecovery: this.errorRecovery.getErrorStats(),
+        continuousLearning: this.continuousLearning.getLearningStats(),
+        deliverableSystem: {
+          activeDeliverables: this.deliverableSystem.getActiveDeliverables(),
+          availableTemplates: this.deliverableSystem.getAvailableTemplates(),
+          exportFormats: this.deliverableSystem.getAvailableExportFormats()
+        }
+      },
+      enhancedMetrics: this.metrics
+    };
+  }
+
+  /**
+   * Adapt system behavior based on learning
+   */
+  async adaptSystemBehavior() {
+    try {
+      this._setStatus('adapting');
+
+      const result = await this.continuousLearning.adaptSystemBehavior();
+
+      if (result.success) {
+        this.metrics.learningCyclesCompleted++;
+        console.log(`🧠 System adaptation completed: ${result.executedAdaptations.length} adaptations`);
+      }
+
+      this._setStatus('ready');
+      return result;
+
+    } catch (error) {
+      this._setStatus('error');
+      this._emit('error', { error, context: { operation: 'adapt_system_behavior' } });
+      throw error;
+    }
+  }
+
+  /**
+   * Retrieve enhanced context with semantic understanding
+   */
+  async retrieveEnhancedContext(query, options = {}) {
+    try {
+      return await this.advancedMemory.retrieveWithContext(query, {
+        ...options,
+        agentId: this.agentId,
+        currentProjects: Array.from(this.activeProjects.keys())
+      });
+
+    } catch (error) {
+      console.error('Enhanced context retrieval failed:', error);
+      // Fallback to base memory
+      return this.memory.retrieveContext(query, options);
+    }
+  }
+
+  /**
+   * Create persistent session memory
+   */
+  async createSessionMemory(sessionId, goal, context = {}) {
+    try {
+      return await this.advancedMemory.createSessionMemory(sessionId, goal, {
+        ...context,
+        agentId: this.agentId,
+        activeProjects: this.activeProjects.size,
+        timestamp: Date.now()
+      });
+
+    } catch (error) {
+      console.error('Session memory creation failed:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Update session memory with learning
+   */
+  async updateSessionMemory(sessionId, experience) {
+    try {
+      return await this.advancedMemory.updateSessionMemory(sessionId, {
+        ...experience,
+        agentId: this.agentId
+      });
+
+    } catch (error) {
+      console.error('Session memory update failed:', error);
+      return false;
+    }
+  }
+
+  // Helper methods for enhanced capabilities
+  async _executePhaseWithRecovery(phase, planId) {
+    try {
+      // This would integrate with the existing task execution system
+      // with error recovery built in
+      const executionData = {
+        task: phase.phase?.title || 'strategic_phase',
+        success: true,
+        duration: Date.now(),
+        tools: phase.phase?.tasks?.map(t => t.type) || [],
+        context: { planId, phaseId: phase.phase?.id }
+      };
+
+      // Record execution for learning
+      await this.continuousLearning.recordTaskExecution(executionData);
+
+      return {
+        success: true,
+        phase: phase,
+        nextPhase: null // Would be determined by strategic planner
+      };
+
+    } catch (error) {
+      // Use error recovery system
+      const recovery = await this.errorRecovery.handleError(error, {
+        operation: 'execute_phase',
+        phase,
+        planId
+      });
+
+      return {
+        success: recovery.result.success,
+        phase,
+        error,
+        recovery: recovery.strategy.name,
+        nextPhase: null
+      };
+    }
+  }
+
+  getContext() {
+    return {
+      agentId: this.agentId,
+      status: this.status,
+      activeProjects: this.activeProjects.size,
+      completedProjects: this.completedProjects.size,
+      uptime: Date.now() - this.metrics.uptime,
+      memoryUsage: this.memory.getStats(),
+      toolsAvailable: this.tools.getToolDefinitions()
+    };
   }
 }
