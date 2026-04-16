@@ -1,5 +1,7 @@
 # Tiny Autonomous Research Agent
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+
 A lightweight, intelligent autonomous agent designed for long-horizon research tasks with modern UX and comprehensive capabilities.
 
 ## 🌟 Features
